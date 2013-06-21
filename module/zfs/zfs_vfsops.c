@@ -1094,7 +1094,7 @@ zfs_sb_teardown(zfs_sb_t *zsb, boolean_t unmounting)
 	for (zp = list_head(&zsb->z_all_znodes); zp != NULL;
 	    zp = list_next(&zsb->z_all_znodes, zp)) {
 		if (zp->z_sa_hdl) {
-			ASSERT(atomic_read(&ZTOI(zp)->i_count) > 0);
+			ASSERT(atomic_read(&ZTOI(zp)->i_count) >= 0);
 			zfs_znode_dmu_fini(zp);
 		}
 	}
