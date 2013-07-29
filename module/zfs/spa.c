@@ -3845,7 +3845,7 @@ out:
  * Import a non-root pool into the system.
  */
 int
-spa_import(const char *pool, nvlist_t *config, nvlist_t *props, uint64_t flags)
+spa_import(char *pool, nvlist_t *config, nvlist_t *props, uint64_t flags)
 {
 	spa_t *spa;
 	char *altroot = NULL;

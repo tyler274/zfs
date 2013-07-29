@@ -1465,10 +1465,8 @@ zvol_remove_minor(const char *name)
 	return (error);
 }
 
-#if 0 /* XXXtsc */
 static int
-zvol_create_minors_cb(spa_t *spa, uint64_t dsobj,
-		      const char *dsname, void *arg)
+zvol_create_minors_cb(const char *dsname, void *arg)
 {
 	if (strchr(dsname, '/') == NULL)
 		return 0;
@@ -1476,16 +1474,14 @@ zvol_create_minors_cb(spa_t *spa, uint64_t dsobj,
 	(void) __zvol_create_minor(dsname, B_FALSE);
 	return (0);
 }
-#endif
 
 /*
  * Create minors for specified pool, if pool is NULL create minors
  * for all available pools.
  */
 int
-zvol_create_minors(const char *pool)
+zvol_create_minors(char *pool)
 {
-#if 0 /* XXXtsc */
 	spa_t *spa = NULL;
 	int error = 0;
 
@@ -1494,13 +1490,12 @@ zvol_create_minors(const char *pool)
 
 	mutex_enter(&zvol_state_lock);
 	if (pool) {
-		error = dmu_objset_find_spa(NULL, pool, zvol_create_minors_cb,
+		error = dmu_objset_find(pool, zvol_create_minors_cb,
 		    NULL, DS_FIND_CHILDREN | DS_FIND_SNAPSHOTS);
 	} else {
 		mutex_enter(&spa_namespace_lock);
 		while ((spa = spa_next(spa)) != NULL) {
-			error = dmu_objset_find_spa(NULL,
-			    spa_name(spa), zvol_create_minors_cb, NULL,
+			error = dmu_objset_find(spa_name(spa), zvol_create_minors_cb, NULL,
 			    DS_FIND_CHILDREN | DS_FIND_SNAPSHOTS);
 			if (error)
 				break;
@@ -1510,9 +1505,6 @@ zvol_create_minors(const char *pool)
 	mutex_exit(&zvol_state_lock);
 
 	return error;
-#else
-	return 0;
-#endif
 }
 
 /*

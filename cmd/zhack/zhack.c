@@ -124,7 +124,7 @@ import_pool(const char *target, boolean_t readonly)
 	spa_t *spa;
 	nvpair_t *elem;
 	nvlist_t *props;
-	const char *name;
+	char *name;
 
 	kernel_init(readonly ? FREAD : (FREAD | FWRITE));
 	g_zfs = libzfs_init();
