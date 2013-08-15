@@ -1168,7 +1168,7 @@ zfs_do_destroy(int argc, char **argv)
 	int rv = 0;
 	int err = 0;
 	int c;
-	zfs_handle_t *zhp;
+	zfs_handle_t *zhp = NULL;
 	char *at;
 	zfs_type_t type = ZFS_TYPE_DATASET;
 
@@ -1275,7 +1275,7 @@ zfs_do_destroy(int argc, char **argv)
 				}
 			}
 			if (err == 0) {
-				err = zfs_destroy_snaps_nvl(zhp, cb.cb_nvl,
+				err = zfs_destroy_snaps_nvl(g_zfs, cb.cb_nvl,
 				    cb.cb_defer_destroy);
 			}
 		}
