@@ -232,7 +232,9 @@ dsl_dataset_remove_clones_key(dsl_dataset_t *ds, uint64_t mintxg, dmu_tx_t *tx)
 void
 dsl_destroy_snapshot_sync_impl(dsl_dataset_t *ds, boolean_t defer, dmu_tx_t *tx)
 {
+#ifdef ZFS_DEBUG
 	int err;
+#endif
 	int after_branch_point = FALSE;
 	dsl_pool_t *dp = ds->ds_dir->dd_pool;
 	objset_t *mos = dp->dp_meta_objset;
@@ -433,7 +435,7 @@ dsl_destroy_snapshot_sync_impl(dsl_dataset_t *ds, boolean_t defer, dmu_tx_t *tx)
 	spa_prop_clear_bootfs(dp->dp_spa, ds->ds_object, tx);
 
 	if (ds->ds_phys->ds_next_clones_obj != 0) {
-		uint64_t count;
+		ASSERTV(uint64_t count);
 		ASSERT0(zap_count(mos,
 		    ds->ds_phys->ds_next_clones_obj, &count) && count == 0);
 		VERIFY0(dmu_object_free(mos,
@@ -493,7 +495,7 @@ dsl_destroy_snapshots_nvl(nvlist_t *snaps, boolean_t defer,
 		return (0);
 
 	dsda.dsda_snaps = snaps;
-	dsda.dsda_successful_snaps = fnvlist_alloc();
+        VERIFY0(nvlist_alloc(&dsda.dsda_successful_snaps, NV_UNIQUE_NAME, KM_PUSHPAGE));
 	dsda.dsda_defer = defer;
 	dsda.dsda_errlist = errlist;
 
@@ -509,8 +511,11 @@ int
 dsl_destroy_snapshot(const char *name, boolean_t defer)
 {
 	int error;
-	nvlist_t *nvl = fnvlist_alloc();
-	nvlist_t *errlist = fnvlist_alloc();
+	nvlist_t *nvl;
+	nvlist_t *errlist;
+
+        VERIFY0(nvlist_alloc(&nvl, NV_UNIQUE_NAME, KM_PUSHPAGE));
+        VERIFY0(nvlist_alloc(&errlist, NV_UNIQUE_NAME, KM_PUSHPAGE));
 
 	fnvlist_add_boolean(nvl, name);
 	error = dsl_destroy_snapshots_nvl(nvl, defer, errlist);
