@@ -812,8 +812,8 @@ dsl_dataset_remove_from_next_clones(dsl_dataset_t *ds, uint64_t obj,
     dmu_tx_t *tx)
 {
 	objset_t *mos = ds->ds_dir->dd_pool->dp_meta_objset;
-	uint64_t count;
 	int err;
+	ASSERTV(uint64_t count);
 
 	ASSERT(ds->ds_phys->ds_num_children >= 2);
 	err = zap_remove_int(mos, ds->ds_phys->ds_next_clones_obj, obj, tx);
@@ -1011,14 +1011,13 @@ void
 dsl_dataset_snapshot_sync_impl(dsl_dataset_t *ds, const char *snapname,
     dmu_tx_t *tx)
 {
-	static zil_header_t zero_zil;
-
 	dsl_pool_t *dp = ds->ds_dir->dd_pool;
 	dmu_buf_t *dbuf;
 	dsl_dataset_phys_t *dsphys;
 	uint64_t dsobj, crtxg;
 	objset_t *mos = dp->dp_meta_objset;
-	objset_t *os;
+	ASSERTV(static zil_header_t zero_zil);
+	ASSERTV(objset_t *os);
 
 	ASSERT(RRW_WRITE_HELD(&dp->dp_config_rwlock));
 
@@ -1381,8 +1380,8 @@ fail:
 void
 dsl_dataset_stats(dsl_dataset_t *ds, nvlist_t *nv)
 {
-	dsl_pool_t *dp = ds->ds_dir->dd_pool;
 	uint64_t refd, avail, uobjs, aobjs, ratio;
+	ASSERTV(dsl_pool_t *dp = ds->ds_dir->dd_pool);
 
 	ASSERT(dsl_pool_config_held(dp));
 

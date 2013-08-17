@@ -622,9 +622,9 @@ dmu_send(const char *tosnap, const char *fromsnap,
 int
 dmu_send_estimate(dsl_dataset_t *ds, dsl_dataset_t *fromds, uint64_t *sizep)
 {
-	dsl_pool_t *dp = ds->ds_dir->dd_pool;
 	int err;
 	uint64_t size, recordsize;
+	ASSERTV(dsl_pool_t *dp = ds->ds_dir->dd_pool);
 
 	ASSERT(dsl_pool_config_held(dp));
 
