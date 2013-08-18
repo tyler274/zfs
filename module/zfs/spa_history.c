@@ -261,7 +261,8 @@ spa_history_log_sync(void *arg1, void *arg2, dmu_tx_t *tx)
 		    fnvlist_lookup_string(nvl, ZPOOL_HIST_IOCTL));
 	}
 
-	record_packed = fnvlist_pack(nvl, &reclen);
+	VERIFY3U(nvlist_pack(nvl, &record_packed, &reclen, NV_ENCODE_NATIVE,
+	    KM_PUSHPAGE), ==, 0);
 
 	mutex_enter(&spa->spa_history_lock);
 
@@ -317,7 +318,7 @@ spa_history_log_nvl(spa_t *spa, nvlist_t *nvl)
 		return (err);
 	}
 
-	nvarg = fnvlist_dup(nvl);
+	VERIFY0(nvlist_dup(nvl, &nvarg, KM_PUSHPAGE));
 	if (spa_history_zone() != NULL) {
 		fnvlist_add_string(nvarg, ZPOOL_HIST_ZONE,
 		    spa_history_zone());
