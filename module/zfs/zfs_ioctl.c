@@ -3531,6 +3531,7 @@ zfs_ioc_rename(zfs_cmd_t *zc)
 {
 	boolean_t recursive = zc->zc_cookie & 1;
 	char *at;
+	int err;
 
 	zc->zc_value[sizeof (zc->zc_value) - 1] = '\0';
 	if (dataset_namecheck(zc->zc_value, NULL, NULL) != 0 ||
@@ -3553,11 +3554,12 @@ zfs_ioc_rename(zfs_cmd_t *zc)
 		return (dsl_dataset_rename_snapshot(zc->zc_name,
 		    at + 1, strchr(zc->zc_value, '@') + 1, recursive));
 	} else {
-		if (zc->zc_objset_type == DMU_OST_ZVOL) {
+		err = dsl_dir_rename(zc->zc_name, zc->zc_value);
+		if (!err && zc->zc_objset_type == DMU_OST_ZVOL) {
 			(void) zvol_remove_minor(zc->zc_name);
-			(void) zvol_create_minor(zc->zc_value);	/* XXXtsc ordering between minor ops and the dsl_dir_rename below; should rename come first? */
+			(void) zvol_create_minor(zc->zc_value);
 		}
-		return (dsl_dir_rename(zc->zc_name, zc->zc_value));
+		return (err);
 	}
 }
 
