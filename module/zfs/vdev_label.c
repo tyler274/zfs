@@ -216,7 +216,7 @@ vdev_config_generate(spa_t *spa, vdev_t *vd, boolean_t getstats,
 {
 	nvlist_t *nv = NULL;
 
-	nv = fnvlist_alloc();
+	VERIFY0(nvlist_alloc(&nv, NV_UNIQUE_NAME, KM_PUSHPAGE));
 
 	fnvlist_add_string(nv, ZPOOL_CONFIG_TYPE, vd->vdev_ops->vdev_op_type);
 	if (!(flags & (VDEV_CONFIG_SPARE | VDEV_CONFIG_L2CACHE)))
