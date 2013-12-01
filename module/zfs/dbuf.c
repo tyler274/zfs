@@ -580,6 +580,7 @@ dbuf_read_impl(dmu_buf_impl_t *db, zio_t *zio, uint32_t *flags)
 	ASSERT(MUTEX_HELD(&db->db_mtx));
 	ASSERT(db->db_state == DB_UNCACHED);
 	ASSERT(db->db_buf == NULL);
+	dn->dn_phys->dn_flags &= ~DNODE_FLAG_SPILL_BLKPTR;	/* XXX - disable spill blkptrs (hopefully only large SA xattrs) */
 
 	if (db->db_blkid == DMU_BONUS_BLKID) {
 		int bonuslen = MIN(dn->dn_bonuslen, dn->dn_phys->dn_bonuslen);
