@@ -395,6 +395,9 @@ prefetch_dnode_metadata(traverse_data_t *td, const dnode_phys_t *dnp,
 	}
 
 	if (dnp->dn_flags & DNODE_FLAG_SPILL_BLKPTR) {
+#if !defined(_KERNEL)
+		fprintf(stderr, "XXXX: got SPILL_BLKPTR!!!!!\n");
+#endif
 		SET_BOOKMARK(&czb, objset, object, 0, DMU_SPILL_BLKID);
 		traverse_prefetch_metadata(td, &dnp->dn_spill, &czb);
 	}
