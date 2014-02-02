@@ -289,6 +289,16 @@ struct zbookmark {
 	(zb)->zb_level == ZB_ROOT_LEVEL &&	\
 	(zb)->zb_blkid == ZB_ROOT_BLKID)
 
+#define	SCAN_ZB_IS_ZERO(scan)			\
+	((scan)->scn_zb_objset == 0 &&		\
+	(scan)->scn_zb_object == 0 &&		\
+	(scan)->scn_zb_level == 0 &&		\
+	(scan)->scn_zb_blkid == 0)
+#define	SCAN_ZB_IS_ROOT(scan)				\
+	((scan)->scn_zb_object == ZB_ROOT_OBJECT &&	\
+	(scan)->scn_zb_level == ZB_ROOT_LEVEL &&	\
+	(scan)->scn_zb_blkid == ZB_ROOT_BLKID)
+
 typedef struct zio_prop {
 	enum zio_checksum	zp_checksum;
 	enum zio_compress	zp_compress;

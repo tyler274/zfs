@@ -62,7 +62,13 @@ typedef struct dsl_scan_phys {
 	uint64_t scn_errors;	/* scan I/O error count */
 	uint64_t scn_ddt_class_max;
 	ddt_bookmark_t scn_ddt_bookmark;
-	zbookmark_t scn_bookmark;
+
+	/* The next 4 members represent a bookmark_t */
+	uint64_t scn_zb_objset;
+	uint64_t scn_zb_object;
+	uint64_t scn_zb_level;
+	uint64_t scn_zb_blkid;
+
 	uint64_t scn_flags; /* dsl_scan_flags_t */
 } dsl_scan_phys_t;
 
@@ -71,6 +77,20 @@ typedef struct dsl_scan_phys {
 typedef enum dsl_scan_flags {
 	DSF_VISIT_DS_AGAIN = 1<<0,
 } dsl_scan_flags_t;
+
+#define	SCAN_COMPARE_ZBOOKMARK(scan, zb) \
+	((scan)->scn_zb_objset == (zb)->zb_objset &&	\
+	(scan)->scn_zb_object == (zb)->zb_object &&	\
+	(scan)->scn_zb_level == (zb)->zb_level &&	\
+	(scan)->scn_zb_blkid == (zb)->zb_blkid)
+
+#define	SCAN_SET_BOOKMARK(scan, objset, object, level, blkid)	\
+{								\
+	(scan)->scn_zb_objset = objset;				\
+	(scan)->scn_zb_object = object;				\
+	(scan)->scn_zb_level = level;				\
+	(scan)->scn_zb_blkid = blkid;				\
+}
 
 /*
  * Every pool will have one dsl_scan_t and this structure will contain
