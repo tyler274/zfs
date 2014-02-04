@@ -123,6 +123,41 @@ dsl_scan_init(dsl_pool_t *dp, uint64_t txg)
 		err = zap_lookup(dp->dp_meta_objset, DMU_POOL_DIRECTORY_OBJECT,
 		    DMU_POOL_SCAN, sizeof (uint64_t), SCAN_PHYS_NUMINTS,
 		    &scn->scn_phys);
+		/*
+		 * Detect if the pool contains the signature of #2094.  If it
+		 * does properly update the scn->scn_phys struct and notify the
+		 * administrator via 'zpool status' to scrub the pool.  In the
+		 * unlikely event that an async destroy is in progress return
+		 * an error.  The destroy must be allowed to completely under
+		 * the previous code and only then may be imported using the
+		 * new code and the pool corrected with a 'zpool scrub'.
+		 *
+		 * See http://github.com/zfsonlinux/zfs/issue/2094
+		 */
+		if (err == EOVERFLOW) {
+			uint64_t zaptmp[SCAN_PHYS_NUMINTS + 1];
+			VERIFY3S(SCAN_PHYS_NUMINTS, ==, 24);
+			VERIFY3S(offsetof(dsl_scan_phys_t, scn_flags), ==,
+			    (23 * sizeof (uint64_t)));
+
+			err = zap_lookup(dp->dp_meta_objset,
+			    DMU_POOL_DIRECTORY_OBJECT, DMU_POOL_SCAN,
+			    sizeof (uint64_t), SCAN_PHYS_NUMINTS + 1, &zaptmp);
+			if (err == 0) {
+				uint64_t overflow = zaptmp[SCAN_PHYS_NUMINTS];
+
+				if (overflow & ~DSL_SCAN_FLAGS_MASK ||
+				    scn->scn_async_destroying)
+					return (EOVERFLOW);
+
+				bcopy(zaptmp, &scn->scn_phys,
+				    SCAN_PHYS_NUMINTS * sizeof (uint64_t));
+				scn->scn_phys.scn_flags = overflow;
+				spa->spa_scan_pass_errata |= DSE_ZOL_2094;
+			}
+			/* Fall-thru to the expected error handling */
+		}
+
 		if (err == ENOENT)
 			return (0);
 		else if (err)
@@ -319,6 +354,7 @@ dsl_scan_done(dsl_scan_t *scn, boolean_t complete, dmu_tx_t *tx)
 	}
 
 	scn->scn_phys.scn_end_time = gethrestime_sec();
+	spa->spa_scan_pass_errata &= ~DSE_ZOL_2094;
 }
 
 /* ARGSUSED */

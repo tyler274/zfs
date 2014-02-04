@@ -694,6 +694,7 @@ typedef struct pool_scan_stat {
 	/* values not stored on disk */
 	uint64_t	pss_pass_exam;	/* examined bytes per scan pass */
 	uint64_t	pss_pass_start;	/* start time of a scan pass */
+	uint64_t	pss_pass_errata; /* additional informational errata */
 } pool_scan_stat_t;
 
 typedef enum dsl_scan_state {
@@ -704,6 +705,8 @@ typedef enum dsl_scan_state {
 	DSS_NUM_STATES
 } dsl_scan_state_t;
 
+#define	DSE_ZOL_2094		0x01	/* Zol Issue #2094 */
+#define	DSL_SCAN_ERRATA_MASK	(DSE_ZOL_2094)
 
 /*
  * Vdev statistics.  Note: all fields should be 64-bit because this

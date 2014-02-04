@@ -3903,6 +3903,19 @@ print_scan_status(pool_scan_stat_t *ps)
 		return;
 	}
 
+	/*
+	 * Scan required due to known errata.
+	 */
+	if ((ps->pss_pass_errata & DSE_ZOL_2094) &&
+	    (ps->pss_state == DSS_FINISHED || ps->pss_state == DSS_CANCELED)) {
+		(void) printf(gettext("pool compatibility issue detected.\n"));
+		(void) printf(gettext(
+		    "   see: https://github.com/zfsonlinux/zfs/issues/2094\n"));
+		(void) printf(gettext(
+		    "action: To correct the issue run 'zpool scrub'.\n"));
+		return;
+	}
+
 	start = ps->pss_start_time;
 	end = ps->pss_end_time;
 	zfs_nicenum(ps->pss_processed, processed_buf, sizeof (processed_buf));

@@ -1795,6 +1795,7 @@ spa_scan_get_stats(spa_t *spa, pool_scan_stat_t *ps)
 	/* data not stored on disk */
 	ps->pss_pass_start = spa->spa_scan_pass_start;
 	ps->pss_pass_exam = spa->spa_scan_pass_exam;
+	ps->pss_pass_errata = spa->spa_scan_pass_errata;
 
 	return (0);
 }
