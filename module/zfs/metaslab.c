@@ -991,7 +991,7 @@ metaslab_init(metaslab_group_t *mg, uint64_t id, uint64_t object, uint64_t txg)
 	metaslab_t *msp;
 
 	msp = kmem_alloc(sizeof (metaslab_t), KM_PUSHPAGE);
-	/* XXX bzero(msp, sizeof (*msp)); */
+	bzero(msp, sizeof (*msp));
 	mutex_init(&msp->ms_lock, NULL, MUTEX_DEFAULT, NULL);
 	cv_init(&msp->ms_load_cv, NULL, CV_DEFAULT, NULL);
 	msp->ms_id = id;
