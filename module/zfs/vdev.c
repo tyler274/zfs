@@ -1849,6 +1849,8 @@ vdev_dtl_reassess(vdev_t *vd, uint64_t txg, uint64_t scrub_txg, int scrub_done)
 
 	mutex_enter(&vd->vdev_dtl_lock);
 	for (t = 0; t < DTL_TYPES; t++) {
+		int c;
+
 		/* account for child's outage in parent's missing map */
 		int s = (t == DTL_MISSING) ? DTL_OUTAGE: t;
 		if (t == DTL_SCRUB)
@@ -1860,7 +1862,7 @@ vdev_dtl_reassess(vdev_t *vd, uint64_t txg, uint64_t scrub_txg, int scrub_done)
 		else
 			minref = vd->vdev_children;	/* any kind of mirror */
 		space_reftree_create(&reftree);
-		for (int c = 0; c < vd->vdev_children; c++) {
+		for (c = 0; c < vd->vdev_children; c++) {
 			vdev_t *cvd = vd->vdev_child[c];
 			mutex_enter(&cvd->vdev_dtl_lock);
 			space_reftree_add_map(&reftree, cvd->vdev_dtl[s], 1);
@@ -1878,6 +1880,7 @@ vdev_dtl_load(vdev_t *vd)
 	spa_t *spa = vd->vdev_spa;
 	objset_t *mos = spa->spa_meta_objset;
 	int error = 0;
+	int c;
 
 	if (vd->vdev_ops->vdev_op_leaf && vd->vdev_dtl_object != 0) {
 		ASSERT(!vd->vdev_ishole);
@@ -1903,7 +1906,7 @@ vdev_dtl_load(vdev_t *vd)
 		return (error);
 	}
 
-	for (int c = 0; c < vd->vdev_children; c++) {
+	for (c = 0; c < vd->vdev_children; c++) {
 		error = vdev_dtl_load(vd->vdev_child[c]);
 		if (error != 0)
 			break;
@@ -2145,7 +2148,7 @@ vdev_remove(vdev_t *vd, uint64_t txg)
 		for (m = 0; m < vd->vdev_ms_count; m++) {
 			metaslab_t *msp = vd->vdev_ms[m];
 
-+			if (msp == NULL || msp->ms_sm == NULL)
+			if (msp == NULL || msp->ms_sm == NULL)
 				continue;
 
 			mutex_enter(&msp->ms_lock);

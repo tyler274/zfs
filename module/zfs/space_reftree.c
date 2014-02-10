@@ -157,3 +157,13 @@ space_reftree_generate_map(avl_tree_t *t, range_tree_t *rt, int64_t minref)
 	ASSERT(refcnt == 0);
 	ASSERT(start == -1ULL);
 }
+
+#ifdef XXX
+#if defined(_KERNEL) && defined(HAVE_SPL)
+EXPORT_SYMBOL(space_reftree_destroy);
+EXPORT_SYMBOL(space_reftree_add_map);
+EXPORT_SYMBOL(space_reftree_add_seg);
+EXPORT_SYMBOL(space_reftree_create);
+EXPORT_SYMBOL(space_reftree_generate_map);
+#endif
+#endif

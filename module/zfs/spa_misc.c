@@ -446,14 +446,6 @@ spa_deadman(void *arg)
 {
 	spa_t *spa = arg;
 
-	/*
-	 * Disable the deadman timer if the pool is suspended.
-	 */
-	if (spa_suspended(spa)) {
-		VERIFY(cyclic_reprogram(spa->spa_deadman_cycid, CY_INFINITY));
-		return;
-	}
-
 	zfs_dbgmsg("slow spa_sync: started %llu seconds ago, calls %llu",
 	    (gethrtime() - spa->spa_sync_starttime) / NANOSEC,
 	    ++spa->spa_deadman_calls);

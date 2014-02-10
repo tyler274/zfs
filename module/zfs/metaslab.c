@@ -33,6 +33,8 @@
 #include <sys/zio.h>
 #include <sys/spa_impl.h>
 
+#define	WITH_DF_BLOCK_ALLOCATOR
+
 /*
  * Allow allocations to switch to gang blocks quickly. We do this to
  * avoid having to load lots of space_maps in a given txg. There are,
@@ -639,6 +641,9 @@ metaslab_block_alloc(metaslab_t *msp, uint64_t size)
  * ==========================================================================
  */
 
+#if defined(WITH_FF_BLOCK_ALLOCATOR) || \
+    defined(WITH_DF_BLOCK_ALLOCATOR) || \
+    defined(WITH_CDF_BLOCK_ALLOCATOR)
 /*
  * This is a helper function that can be used by the allocator to find
  * a suitable block to allocate. This will search the specified AVL
@@ -678,7 +683,9 @@ metaslab_block_picker(avl_tree_t *t, uint64_t *cursor, uint64_t size,
 	*cursor = 0;
 	return (metaslab_block_picker(t, cursor, size, align));
 }
+#endif /* WITH_FF/DF/CDF_BLOCK_ALLOCATOR */
 
+#if defined(WITH_FF_BLOCK_ALLOCATOR)
 /*
  * ==========================================================================
  * The first-fit block allocator
@@ -713,8 +720,10 @@ static metaslab_ops_t metaslab_ff_ops = {
 	metaslab_ff_fragmented
 };
 
-space_map_ops_t *zfs_metaslab_ops = &metaslab_ff_ops;
+metaslab_ops_t *zfs_metaslab_ops = &metaslab_ff_ops;
+#endif /* WITH_FF_BLOCK_ALLOCATOR */
 
+#if defined(WITH_DF_BLOCK_ALLOCATOR)
 /*
  * ==========================================================================
  * Dynamic block allocator -
@@ -779,6 +788,10 @@ static metaslab_ops_t metaslab_df_ops = {
 	metaslab_df_fragmented
 };
 
+metaslab_ops_t *zfs_metaslab_ops = &metaslab_df_ops;
+#endif /* WITH_DF_BLOCK_ALLOCATOR */
+
+#if defined(WITH_CF_BLOCK_ALLOCATOR)
 /*
  * ==========================================================================
  * Cursor fit block allocator -
@@ -830,6 +843,10 @@ static metaslab_ops_t metaslab_cf_ops = {
 	metaslab_cf_fragmented
 };
 
+metaslab_ops_t *zfs_metaslab_ops = &metaslab_cf_ops;
+#endif /* WITH_CF_BLOCK_ALLOCATOR */
+
+#if defined(WITH_NDF_BLOCK_ALLOCATOR)
 /*
  * ==========================================================================
  * New dynamic fit allocator -
@@ -896,7 +913,9 @@ static metaslab_ops_t metaslab_ndf_ops = {
 	metaslab_ndf_fragmented
 };
 
-metaslab_ops_t *zfs_metaslab_ops = &metaslab_df_ops;
+metaslab_ops_t *zfs_metaslab_ops = &metaslab_ndf_ops;
+#endif /* WITH_NDF_BLOCK_ALLOCATOR */
+
 
 /*
  * ==========================================================================
@@ -1258,7 +1277,7 @@ metaslab_group_preload(metaslab_group_t *mg)
 			break;
 
 		VERIFY(taskq_dispatch(mg->mg_taskq, metaslab_preload,
-		    msp, TQ_SLEEP) != NULL);
+		    msp, TQ_SLEEP) != 0);
 	}
 	mutex_exit(&mg->mg_lock);
 }
@@ -2297,6 +2316,8 @@ metaslab_check_free(spa_t *spa, const blkptr_t *bp)
 }
 
 #if defined(_KERNEL) && defined(HAVE_SPL)
-module_param(metaslab_debug, int, 0644);
-MODULE_PARM_DESC(metaslab_debug, "keep space maps in core to verify frees");
+module_param(metaslab_debug_load, int, 0644);
+module_param(metaslab_debug_unload, int, 0644);
+MODULE_PARM_DESC(metaslab_debug_load, "load all metaslabs when pool is first opened");
+MODULE_PARM_DESC(metaslab_debug_unload, "prevent metaslabs from being unloaded");
 #endif /* _KERNEL && HAVE_SPL */

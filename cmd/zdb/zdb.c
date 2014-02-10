@@ -525,6 +525,7 @@ int
 get_dtl_refcount(vdev_t *vd)
 {
 	int refcount = 0;
+	int c;
 
 	if (vd->vdev_ops->vdev_op_leaf) {
 		space_map_t *sm = vd->vdev_dtl_sm;
@@ -535,7 +536,7 @@ get_dtl_refcount(vdev_t *vd)
 		return (0);
 	}
 
-	for (int c = 0; c < vd->vdev_children; c++)
+	for (c = 0; c < vd->vdev_children; c++)
 		refcount += get_dtl_refcount(vd->vdev_child[c]);
 	return (refcount);
 }
@@ -544,9 +545,10 @@ int
 get_metaslab_refcount(vdev_t *vd)
 {
 	int refcount = 0;
+	int c, m;
 
 	if (vd->vdev_top == vd) {
-		for (int m = 0; m < vd->vdev_ms_count; m++) {
+		for (m = 0; m < vd->vdev_ms_count; m++) {
 			space_map_t *sm = vd->vdev_ms[m]->ms_sm;
 
 			if (sm != NULL &&
@@ -554,7 +556,7 @@ get_metaslab_refcount(vdev_t *vd)
 				refcount++;
 		}
 	}
-	for (int c = 0; c < vd->vdev_children; c++)
+	for (c = 0; c < vd->vdev_children; c++)
 		refcount += get_metaslab_refcount(vd->vdev_child[c]);
 
 	return (refcount);

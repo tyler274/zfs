@@ -389,3 +389,20 @@ range_tree_space(range_tree_t *rt)
 {
 	return (rt->rt_space);
 }
+
+#ifdef XXX
+#if defined(_KERNEL) && defined(HAVE_SPL)
+EXPORT_SYMBOL(range_tree_add);
+EXPORT_SYMBOL(range_tree_contains);
+EXPORT_SYMBOL(range_tree_create);
+EXPORT_SYMBOL(range_tree_destroy);
+EXPORT_SYMBOL(range_tree_fini);
+EXPORT_SYMBOL(range_tree_init);
+EXPORT_SYMBOL(range_tree_remove);
+EXPORT_SYMBOL(range_tree_space);
+EXPORT_SYMBOL(range_tree_swap);
+EXPORT_SYMBOL(range_tree_vacate);
+EXPORT_SYMBOL(range_tree_verify);
+EXPORT_SYMBOL(range_tree_walk);
+#endif
+#endif

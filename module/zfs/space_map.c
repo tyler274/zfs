@@ -38,6 +38,13 @@
 #include <sys/zfeature.h>
 
 /*
+ * XXX - should be in the spl???
+ */
+#ifdef _KERNEL
+#define howmany(x, y)	(((x) + ((y) - 1)) / (y))
+#endif
+
+/*
  * This value controls how the space map's block size is allowed to grow.
  * If the value is set to the same size as SPACE_MAP_INITIAL_BLOCKSIZE then
  * the space map block size will remain fixed. Setting this value to something
@@ -147,11 +154,13 @@ space_map_histogram_clear(space_map_t *sm)
 boolean_t
 space_map_histogram_verify(space_map_t *sm, range_tree_t *rt)
 {
+	int i;
+
 	/*
 	 * Verify that the in-core range tree does not have any
 	 * ranges smaller than our sm_shift size.
 	 */
-	for (int i = 0; i < sm->sm_shift; i++) {
+	for (i = 0; i < sm->sm_shift; i++) {
 		if (rt->rt_histogram[i] != 0)
 			return (B_FALSE);
 	}
@@ -162,6 +171,7 @@ void
 space_map_histogram_add(space_map_t *sm, range_tree_t *rt, dmu_tx_t *tx)
 {
 	int idx = 0;
+	int i;
 
 	ASSERT(MUTEX_HELD(rt->rt_lock));
 	ASSERT(dmu_tx_is_syncing(tx));
@@ -182,7 +192,7 @@ space_map_histogram_add(space_map_t *sm, range_tree_t *rt, dmu_tx_t *tx)
 	 * map only cares about allocatable blocks (minimum of sm_shift) we
 	 * can safely ignore all ranges in the range tree smaller than sm_shift.
 	 */
-	for (int i = sm->sm_shift; i < RANGE_TREE_HISTOGRAM_SIZE; i++) {
+	for (i = sm->sm_shift; i < RANGE_TREE_HISTOGRAM_SIZE; i++) {
 
 		/*
 		 * Since the largest histogram bucket in the space map is
