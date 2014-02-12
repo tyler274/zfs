@@ -340,6 +340,7 @@ typedef enum {
 	ZPOOL_STATUS_RESILVERING,	/* device being resilvered */
 	ZPOOL_STATUS_OFFLINE_DEV,	/* device online */
 	ZPOOL_STATUS_REMOVED_DEV,	/* removed device */
+	ZPOOL_STATUS_SCAN_ERRATA,	/* incompatible scan detected */
 
 	/*
 	 * Finally, the following indicates a healthy pool.

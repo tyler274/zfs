@@ -1715,6 +1715,11 @@ show_import(nvlist_t *config)
 		    "resilvered.\n"));
 		break;
 
+	case ZPOOL_STATUS_SCAN_ERRATA:
+		(void) printf(gettext(" status: pool compatibility issue detected.\n\t"
+			"See: https://github.com/zfsonlinux/zfs/issues/2094.\n"));
+		break;
+
 	default:
 		/*
 		 * No other status can be seen when importing pools.
@@ -1736,6 +1741,11 @@ show_import(nvlist_t *config)
 			(void) printf(gettext(" action: The pool can be "
 			    "imported using its name or numeric "
 			    "identifier and\n\tthe '-f' flag.\n"));
+		} else if (reason == ZPOOL_STATUS_SCAN_ERRATA) {
+			(void) printf(gettext(" action: The pool can be "
+			    "imported using its name or numeric "
+			    "identifier, though\n\tthe compatibility issue "
+			    "should be corrected by running 'zpool scrub'\n"));
 		} else {
 			(void) printf(gettext(" action: The pool can be "
 			    "imported using its name or numeric "
@@ -3903,19 +3913,6 @@ print_scan_status(pool_scan_stat_t *ps)
 		return;
 	}
 
-	/*
-	 * Scan required due to known errata.
-	 */
-	if ((ps->pss_pass_errata & DSE_ZOL_2094) &&
-	    (ps->pss_state == DSS_FINISHED || ps->pss_state == DSS_CANCELED)) {
-		(void) printf(gettext("pool compatibility issue detected.\n"));
-		(void) printf(gettext(
-		    "   see: https://github.com/zfsonlinux/zfs/issues/2094\n"));
-		(void) printf(gettext(
-		    "action: To correct the issue run 'zpool scrub'.\n"));
-		return;
-	}
-
 	start = ps->pss_start_time;
 	end = ps->pss_end_time;
 	zfs_nicenum(ps->pss_processed, processed_buf, sizeof (processed_buf));
@@ -4360,6 +4357,14 @@ status_callback(zpool_handle_t *zhp, void *data)
 		    "device(s) and run 'zpool online',\n"
 		    "\tor ignore the intent log records by running "
 		    "'zpool clear'.\n"));
+		break;
+
+	case ZPOOL_STATUS_SCAN_ERRATA:
+		(void) printf(gettext("status: pool compatibility issue detected.\n"));
+		(void) printf(gettext(
+		    "\tsee: https://github.com/zfsonlinux/zfs/issues/2094\n"));
+		(void) printf(gettext(
+		    "action: To correct the issue run 'zpool scrub'.\n"));
 		break;
 
 	default:

@@ -356,6 +356,13 @@ check_status(nvlist_t *config, boolean_t isimport)
 		}
 	}
 
+	/*
+	 * Scan required due to known errata.
+	 */
+	if (ps && (ps->pss_pass_errata & DSE_ZOL_2094) &&
+	    (ps->pss_state == DSS_FINISHED || ps->pss_state == DSS_CANCELED))
+		return (ZPOOL_STATUS_SCAN_ERRATA);
+
 	return (ZPOOL_STATUS_OK);
 }
 
