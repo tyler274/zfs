@@ -441,6 +441,11 @@ space_map_open(space_map_t **smp, objset_t *os, uint64_t object,
 	sm->sm_lock = lp;
 	sm->sm_os = os;
 	sm->sm_object = object;
+	sm->sm_length = 0;
+	sm->sm_alloc = 0;
+	sm->sm_blksz = 0;
+	sm->sm_dbuf = NULL;
+	sm->sm_phys = NULL;
 
 	error = space_map_open_impl(sm);
 	if (error != 0) {
