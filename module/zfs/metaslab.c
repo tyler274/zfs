@@ -163,7 +163,6 @@ metaslab_class_create(spa_t *spa, metaslab_ops_t *ops)
 
 	mc = kmem_zalloc(sizeof (metaslab_class_t), KM_PUSHPAGE);
 
-	/* XXX bzero(mc, sizeof(*mc)); */
 	mc->mc_spa = spa;
 	mc->mc_rotor = NULL;
 	mc->mc_ops = ops;
@@ -327,7 +326,6 @@ metaslab_group_create(metaslab_class_t *mc, vdev_t *vd)
 	metaslab_group_t *mg;
 
 	mg = kmem_zalloc(sizeof (metaslab_group_t), KM_PUSHPAGE);
-	/* XXX bzero(mg, sizeof(*mg)); */
 	mutex_init(&mg->mg_lock, NULL, MUTEX_DEFAULT, NULL);
 	avl_create(&mg->mg_metaslab_tree, metaslab_compare,
 	    sizeof (metaslab_t), offsetof(struct metaslab, ms_group_node));
@@ -990,8 +988,7 @@ metaslab_init(metaslab_group_t *mg, uint64_t id, uint64_t object, uint64_t txg)
 	objset_t *mos = vd->vdev_spa->spa_meta_objset;
 	metaslab_t *msp;
 
-	msp = kmem_alloc(sizeof (metaslab_t), KM_PUSHPAGE);
-	bzero(msp, sizeof (*msp));
+	msp = kmem_zalloc(sizeof (metaslab_t), KM_PUSHPAGE);
 	mutex_init(&msp->ms_lock, NULL, MUTEX_DEFAULT, NULL);
 	cv_init(&msp->ms_load_cv, NULL, CV_DEFAULT, NULL);
 	msp->ms_id = id;

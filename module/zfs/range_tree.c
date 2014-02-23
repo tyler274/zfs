@@ -131,7 +131,6 @@ range_tree_create(range_tree_ops_t *ops, void *arg, kmutex_t *lp)
 	range_tree_t *rt;
 
 	rt = kmem_zalloc(sizeof (range_tree_t), KM_PUSHPAGE);
-	/* XXX bzero(rt, sizeof(*rt)); */
 
 	avl_create(&rt->rt_root, range_tree_seg_compare,
 	    sizeof (range_seg_t), offsetof(range_seg_t, rs_node));

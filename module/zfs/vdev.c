@@ -194,7 +194,7 @@ vdev_add_child(vdev_t *pvd, vdev_t *cvd)
 	pvd->vdev_children = MAX(pvd->vdev_children, id + 1);
 	newsize = pvd->vdev_children * sizeof (vdev_t *);
 
-	newchild = kmem_zalloc(newsize, KM_PUSHPAGE);
+	newchild = kmem_alloc(newsize, KM_PUSHPAGE);
 	if (pvd->vdev_child != NULL) {
 		bcopy(pvd->vdev_child, newchild, oldsize);
 		kmem_free(pvd->vdev_child, oldsize);
@@ -264,7 +264,7 @@ vdev_compact_children(vdev_t *pvd)
 		if (pvd->vdev_child[c])
 			newc++;
 
-	newchild = kmem_alloc(newc * sizeof (vdev_t *), KM_PUSHPAGE);
+	newchild = kmem_zalloc(newc * sizeof (vdev_t *), KM_PUSHPAGE);
 
 	for (c = newc = 0; c < oldc; c++) {
 		if ((cvd = pvd->vdev_child[c]) != NULL) {
