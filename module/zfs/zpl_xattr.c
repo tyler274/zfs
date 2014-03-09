@@ -309,7 +309,7 @@ zpl_xattr_get_sa(struct inode *ip, const char *name, void *value, size_t size)
 
 static int
 __zpl_xattr_get(struct inode *ip, const char *name, void *value, size_t size,
-    cred_t *cr)
+    cred_t *cr, boolean_t *is_sa_xattr)
 {
 	znode_t *zp = ITOZ(ip);
 	zfs_sb_t *zsb = ZTOZSB(zp);
@@ -319,15 +319,20 @@ __zpl_xattr_get(struct inode *ip, const char *name, void *value, size_t size,
 
 	if (zsb->z_use_sa && zp->z_is_sa) {
 		error = zpl_xattr_get_sa(ip, name, value, size);
-		if (error != -ENOENT)
+		if (error != -ENOENT) {
+			if (is_sa_xattr)
+				*is_sa_xattr = B_TRUE;
 			goto out;
+		}
 	}
 
+	if (is_sa_xattr)
+		*is_sa_xattr = B_FALSE;
 	error = zpl_xattr_get_dir(ip, name, value, size, cr);
-out:
 	if (error == -ENOENT)
 		error = -ENODATA;
 
+out:
 	return (error);
 }
 
@@ -340,7 +345,7 @@ zpl_xattr_get(struct inode *ip, const char *name, void *value, size_t size)
 
 	crhold(cr);
 	rw_enter(&zp->z_xattr_lock, RW_READER);
-	error = __zpl_xattr_get(ip, name, value, size, cr);
+	error = __zpl_xattr_get(ip, name, value, size, cr, NULL);
 	rw_exit(&zp->z_xattr_lock);
 	crfree(cr);
 
@@ -480,7 +485,8 @@ zpl_xattr_set(struct inode *ip, const char *name, const void *value,
 	znode_t *zp = ITOZ(ip);
 	zfs_sb_t *zsb = ZTOZSB(zp);
 	cred_t *cr = CRED();
-	int error;
+	int error, error2, error3;
+	boolean_t is_sa_xattr;
 
 	crhold(cr);
 	rw_enter(&ITOZ(ip)->z_xattr_lock, RW_WRITER);
@@ -492,7 +498,7 @@ zpl_xattr_set(struct inode *ip, const char *name, const void *value,
 	 *   XATTR_CREATE: fail if xattr already exists
 	 *   XATTR_REPLACE: fail if xattr does not exist
 	 */
-	error = __zpl_xattr_get(ip, name, NULL, 0, cr);
+	error = __zpl_xattr_get(ip, name, NULL, 0, cr, &is_sa_xattr);
 	if (error < 0) {
 		if (error != -ENODATA)
 			goto out;
@@ -512,12 +518,21 @@ zpl_xattr_set(struct inode *ip, const char *name, const void *value,
 
 	/* Preferentially store the xattr as a SA for better performance */
 	if (zsb->z_use_sa && zsb->z_xattr_sa && zp->z_is_sa) {
-		error = zpl_xattr_set_sa(ip, name, value, size, flags, cr);
-		if (error == 0)
+		error2 = zpl_xattr_set_sa(ip, name, value, size, flags, cr);
+		if (error2 == 0) {
+			/* Remove an existing dir xattr */
+			if (error == -EEXIST && !is_sa_xattr)
+				(void) zpl_xattr_set_dir(ip, name, NULL, 0, 0, cr);
+			error = error2;
 			goto out;
+		}
 	}
 
-	error = zpl_xattr_set_dir(ip, name, value, size, flags, cr);
+	error3 = zpl_xattr_set_dir(ip, name, value, size, flags, cr);
+	if (error3 == 0 && error == -EEXIST && is_sa_xattr)
+		/* Remove an existing SA xattr */
+		(void) zpl_xattr_set_sa(ip, name, NULL, 0, 0, cr);
+	error = error3;
 out:
 	rw_exit(&ITOZ(ip)->z_xattr_lock);
 	crfree(cr);
