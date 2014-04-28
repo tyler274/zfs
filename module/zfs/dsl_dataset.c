@@ -1047,8 +1047,11 @@ dsl_dataset_snapshot_check(void *arg, dmu_tx_t *tx)
 	 * name errors once.
 	 */
 	if (dmu_tx_is_syncing(tx)) {
+		char *nm;
 		nvlist_t *cnt_track = NULL;
+
 		cnt_track = fnvlist_alloc();
+		nm = kmem_alloc(MAXPATHLEN, KM_PUSHPAGE);
 
 		/* Rollup aggregated counts into the cnt_track list */
 		for (pair = nvlist_next_nvpair(ddsa->ddsa_snaps, NULL);
@@ -1056,9 +1059,8 @@ dsl_dataset_snapshot_check(void *arg, dmu_tx_t *tx)
 		    pair = nvlist_next_nvpair(ddsa->ddsa_snaps, pair)) {
 			char *pdelim;
 			uint64_t val;
-			char nm[MAXPATHLEN];
 
-			(void) strlcpy(nm, nvpair_name(pair), sizeof (nm));
+			(void) strlcpy(nm, nvpair_name(pair), MAXPATHLEN);
 			pdelim = strchr(nm, '@');
 			if (pdelim == NULL)
 				continue;
@@ -1080,6 +1082,8 @@ dsl_dataset_snapshot_check(void *arg, dmu_tx_t *tx)
 					*pdelim = '\0';
 			} while (pdelim != NULL);
 		}
+
+		kmem_free(nm, MAXPATHLEN);
 
 		/* Check aggregated counts at each level */
 		for (pair = nvlist_next_nvpair(cnt_track, NULL);
@@ -1118,8 +1122,9 @@ dsl_dataset_snapshot_check(void *arg, dmu_tx_t *tx)
 		int error = 0;
 		dsl_dataset_t *ds;
 		char *name, *atp;
-		char dsname[MAXNAMELEN];
+		char *dsname;
 
+		dsname = kmem_alloc(MAXNAMELEN, KM_PUSHPAGE);
 		name = nvpair_name(pair);
 		if (strlen(name) >= MAXNAMELEN)
 			error = SET_ERROR(ENAMETOOLONG);
@@ -1132,6 +1137,7 @@ dsl_dataset_snapshot_check(void *arg, dmu_tx_t *tx)
 		}
 		if (error == 0)
 			error = dsl_dataset_hold(dp, dsname, FTAG, &ds);
+		kmem_free(dsname, MAXNAMELEN);
 		if (error == 0) {
 			/* passing 0/NULL skips dsl_fs_ss_limit_check */
 			error = dsl_dataset_snapshot_check_impl(ds,

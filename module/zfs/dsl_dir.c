@@ -42,8 +42,8 @@
 #include <sys/sunddi.h>
 #include <sys/zvol.h>
 #include <sys/zfeature.h>
-#include <sys/policy.h>
 #include <sys/zfs_znode.h>
+#include <sys/zone.h>
 #include "zfs_namecheck.h"
 #include "zfs_prop.h"
 
