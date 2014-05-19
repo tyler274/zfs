@@ -336,7 +336,7 @@ zfs_inode_set_ops(zfs_sb_t *zsb, struct inode *ip)
 		break;
 
 	default:
-		printk("ZFS: Invalid mode: 0x%x\n", ip->i_mode);
+		printk("ZFS: Invalid mode: 0x%x on obj %lu\n", ip->i_mode, ip->i_ino);
 		VERIFY(0);
 	}
 }
