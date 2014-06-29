@@ -429,8 +429,10 @@ differ(void *arg)
 	int err = 0;
 
 	if ((ofp = fdopen(di->outputfd, "w")) == NULL) {
+		char *s;
+
 		di->zerr = errno;
-		(void) strerror_r(errno, di->errbuf, sizeof (di->errbuf));
+		s =  strerror_r(errno, di->errbuf, sizeof (di->errbuf));
 		(void) close(di->datafd);
 		return ((void *)-1);
 	}
