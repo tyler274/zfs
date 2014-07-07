@@ -155,6 +155,11 @@ vdev_lookup_top(spa_t *spa, uint64_t vdev)
 	return (NULL);
 }
 
+uint64_t
+spa_root_vdev_children(spa_t *spa) {
+	return (spa->spa_root_vdev->vdev_children);
+}
+
 vdev_t *
 vdev_lookup_by_guid(vdev_t *vd, uint64_t guid)
 {
