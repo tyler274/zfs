@@ -961,6 +961,13 @@ sprintf_blkptr_compact(char *blkbuf, const blkptr_t *bp)
 	int ndvas = dump_opt['d'] > 5 ? BP_GET_NDVAS(bp) : 1;
 	int i;
 
+	if (dump_opt['d'] > 6) {
+		blkbuf[0] = '\0';
+		for (i = 0 ; i < 16 ; ++i)
+			sprintf(blkbuf + strlen(blkbuf), " [%d]%llx", i, ((unsigned long long *)bp)[i]);
+		return;
+	}
+
 	if (dump_opt['b'] >= 5) {
 		sprintf_blkptr(blkbuf, bp);
 		return;
