@@ -186,6 +186,53 @@ Default value: 24
 .sp
 .ne 2
 .na
+\fBspa_load_verify_data\fR (int)
+.ad
+.RS 12n
+Whether to traverse data blocks during an "extreme rewind" (\fB-FX\fR or
+\fB-FXT <txg>\fR) pool import.  Use 0 to disable and 1 to enable.
+
+An extreme rewind import normally performs a full scrub of the pool.
+If this parameter is set to 1, the scrub skips data (non-metadata) blocks.
+It can be set to 1 prior to the import to completely disable scrubbing
+data blocks or it can be set to 1 once the import has started to stop
+scrubbing data blocks.
+.sp
+Default value: 1
+.RE
+
+.sp
+.ne 2
+.na
+\fBspa_load_verify_metadata\fR (int)
+.ad
+.RS 12n
+Whether to traverse metadata blocks during an "extreme rewind" (\fB-FX\fR
+or \fB-FXT <txg>\fR) pool import.  Use 0 to disable and 1 to enable.
+
+An extreme rewind import normally performs a full scrub of the pool.
+If this parameter is set to 1, the scrub is not performed.  It can be
+set to 1 prior to the import to completely disable the scrub or it can be
+set to 1 once the import has started to stop a partially-completed scrub.
+.sp
+Default value: 1
+.RE
+
+.sp
+.ne 2
+.na
+\fBspa_load_verify_maxinflight\fR (int)
+.ad
+.RS 12n
+Maximum concurrent scrub I/Os during an "extreme rewind" (\fB-FX\fR or
+\fB-FXT <txg>\fR) pool import.
+.sp
+Default value: 10000
+.RE
+
+.sp
+.ne 2
+.na
 \fBzfetch_array_rd_sz\fR (ulong)
 .ad
 .RS 12n
