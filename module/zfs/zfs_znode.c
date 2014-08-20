@@ -1377,7 +1377,6 @@ zfs_free_range(znode_t *zp, uint64_t off, uint64_t len)
 		len = zp->z_size - off;
 
 	error = dmu_free_long_range(zsb->z_os, zp->z_id, off, len);
-
 	zfs_range_unlock(rl);
 
 	return (error);
@@ -1479,8 +1478,7 @@ zfs_freesp(znode_t *zp, uint64_t off, uint64_t len, int flag, boolean_t log)
 		error =  zfs_extend(zp, off+len);
 		if (error == 0 && log)
 			goto log;
-		else
-			return (error);
+		goto out;
 	}
 
 	/*
@@ -1500,7 +1498,7 @@ zfs_freesp(znode_t *zp, uint64_t off, uint64_t len, int flag, boolean_t log)
 			error = zfs_extend(zp, off+len);
 	}
 	if (error || !log)
-		return (error);
+		goto out;
 log:
 	tx = dmu_tx_create(zsb->z_os);
 	dmu_tx_hold_sa(tx, zp->z_sa_hdl, B_FALSE);
@@ -1508,7 +1506,7 @@ log:
 	error = dmu_tx_assign(tx, TXG_WAIT);
 	if (error) {
 		dmu_tx_abort(tx);
-		return (error);
+		goto out;
 	}
 
 	SA_ADD_BULK_ATTR(bulk, count, SA_ZPL_MTIME(zsb), NULL, mtime, 16);
@@ -1522,8 +1520,24 @@ log:
 	zfs_log_truncate(zilog, tx, TX_TRUNCATE, zp, off, len);
 
 	dmu_tx_commit(tx);
+
 	zfs_inode_update(zp);
-	return (0);
+	error = 0;
+
+	/*
+	 * Clear any mapped pages in the truncated region.  This has to
+	 * happen outside of the transaction to avoid the possibility of
+	 * a deadlock with someone trying to push a page that we are
+	 * about to invalidate.
+	 */
+out:
+	if (len == 0)
+		truncate_setsize(ZTOI(zp), off);
+	else
+		truncate_pagecache_range(ZTOI(zp), off,
+		    off + len - 1);
+
+	return (error);
 }
 
 void
