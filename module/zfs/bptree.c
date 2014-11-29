@@ -94,9 +94,11 @@ bptree_free(objset_t *os, uint64_t obj, dmu_tx_t *tx)
 	VERIFY3U(0, ==, dmu_bonus_hold(os, obj, FTAG, &db));
 	bt = db->db_data;
 	ASSERT3U(bt->bt_begin, ==, bt->bt_end);
+#if 0
 	ASSERT0(bt->bt_bytes);
 	ASSERT0(bt->bt_comp);
 	ASSERT0(bt->bt_uncomp);
+#endif
 	dmu_buf_rele(db, FTAG);
 
 	return (dmu_object_free(os, obj, tx));
@@ -290,9 +292,11 @@ bptree_iterate(objset_t *os, uint64_t obj, boolean_t free, bptree_itor_t func,
 			ba.ba_phys->bt_uncomp = 0;
 		}
 
+#if 0
 		ASSERT0(ba.ba_phys->bt_bytes);
 		ASSERT0(ba.ba_phys->bt_comp);
 		ASSERT0(ba.ba_phys->bt_uncomp);
+#endif
 	}
 
 	dmu_buf_rele(db, FTAG);

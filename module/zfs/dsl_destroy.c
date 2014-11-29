@@ -671,8 +671,10 @@ dsl_dir_destroy_sync(uint64_t ddobj, dmu_tx_t *tx)
 	 */
 	dsl_dir_set_reservation_sync_impl(dd, 0, tx);
 
+#if 0
 	ASSERT0(dd->dd_phys->dd_used_bytes);
 	ASSERT0(dd->dd_phys->dd_reserved);
+#endif
 	for (t = 0; t < DD_USED_NUM; t++)
 		ASSERT0(dd->dd_phys->dd_used_breakdown[t]);
 

@@ -117,7 +117,7 @@ enum dnode_dirtycontext {
 #define	DNODE_FLAG_USERUSED_ACCOUNTED	(1<<1)
 
 /* Does dnode have a SA spill blkptr in bonus? */
-#define	DNODE_FLAG_SPILL_BLKPTR	(1<<2)
+#define	DNODE_FLAG_SPILL_BLKPTR	0
 
 typedef struct dnode_phys {
 	uint8_t dn_type;		/* dmu_object_type_t */
