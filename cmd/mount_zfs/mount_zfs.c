@@ -31,6 +31,7 @@
 #include <sys/stat.h>
 #include <libzfs.h>
 #include <locale.h>
+#include <ctype.h>
 
 libzfs_handle_t *g_zfs;
 
@@ -100,6 +101,8 @@ static const option_map_t option_map[] = {
 	{ MNTOPT_XATTR,		MS_COMMENT,	ZS_COMMENT	},
 	{ MNTOPT_NOXATTR,	MS_COMMENT,	ZS_COMMENT	},
 	{ MNTOPT_ZFSUTIL,	MS_COMMENT,	ZS_ZFSUTIL	},
+	{ MNTOPT_UID,		MS_COMMENT,	ZS_UID		},
+	{ MNTOPT_GID,		MS_COMMENT,	ZS_GID		},
 	{ NULL,			0,		0		} };
 
 /*
@@ -108,11 +111,12 @@ static const option_map_t option_map[] = {
  */
 static int
 parse_option(char *mntopt, unsigned long *mntflags,
-    unsigned long *zfsflags, int sloppy)
+    unsigned long *zfsflags, z_mount_opts_t *zmo, int sloppy)
 {
 	const option_map_t *opt;
-	char *ptr, *name, *value = NULL;
+	char *ptr, *name, *value = NULL, *endvalue;
 	int error = 0;
+	unsigned long val;
 
 	name = strdup(mntopt);
 	if (name == NULL)
@@ -140,6 +144,21 @@ parse_option(char *mntopt, unsigned long *mntflags,
 		error = ENOENT;
 out:
 	/* If required further process on the value may be done here */
+
+	/* set zmo_uid if uid=<id> has been specified */
+	if (*zfsflags & ZS_UID && isdigit(value[0])) {
+		val = strtoul(value, &endvalue, 10);
+		if (endvalue && endvalue[0] == '\0')
+			zmo->zmo_uid = val;
+	}
+
+	/* set zmo_gid if gid=<id> has been specified */
+	if (*zfsflags & ZS_GID && isdigit(value[0])) {
+		val = strtoul(value, &endvalue, 10);
+		if (endvalue && endvalue[0] == '\0')
+			zmo->zmo_gid = val;
+	}
+
 	free(name);
 	return (error);
 }
@@ -151,7 +170,7 @@ out:
  */
 static int
 parse_options(char *mntopts, unsigned long *mntflags, unsigned long *zfsflags,
-    int sloppy, char *badopt, char *mtabopt)
+    z_mount_opts_t *zmo, int sloppy, char *badopt, char *mtabopt)
 {
 	int error = 0, quote = 0, flag = 0, count = 0;
 	char *ptr, *opt, *opts;
@@ -185,7 +204,8 @@ parse_options(char *mntopts, unsigned long *mntflags, unsigned long *zfsflags,
 		if ((*ptr == ',') || (*ptr == '\0')) {
 			*ptr = '\0';
 
-			error = parse_option(opt, mntflags, zfsflags, sloppy);
+			error = parse_option(opt, mntflags, zfsflags,
+			    zmo, sloppy);
 			if (error) {
 				strcpy(badopt, opt);
 				goto out;
@@ -363,7 +383,7 @@ main(int argc, char **argv)
 {
 	zfs_handle_t *zhp;
 	char prop[ZFS_MAXPROPLEN];
-	uint64_t zfs_version = 0;
+	uint64_t zfs_version = 0, inheritid = 0;
 	char mntopts[MNT_LINE_MAX] = { '\0' };
 	char badopt[MNT_LINE_MAX] = { '\0' };
 	char mtabopt[MNT_LINE_MAX] = { '\0' };
@@ -372,6 +392,7 @@ main(int argc, char **argv)
 	unsigned long mntflags = 0, zfsflags = 0, remount = 0;
 	int sloppy = 0, fake = 0, verbose = 0, nomtab = 0, zfsutil = 0;
 	int error, c;
+	z_mount_opts_t zmo = {0, 0};
 
 	(void) setlocale(LC_ALL, "");
 	(void) textdomain(TEXT_DOMAIN);
@@ -434,7 +455,7 @@ main(int argc, char **argv)
 	}
 
 	/* validate mount options and set mntflags */
-	error = parse_options(mntopts, &mntflags, &zfsflags, sloppy,
+	error = parse_options(mntopts, &mntflags, &zfsflags, &zmo, sloppy,
 	    badopt, mtabopt);
 	if (error) {
 		switch (error) {
@@ -530,6 +551,39 @@ main(int argc, char **argv)
 		return (MOUNT_SYSERR);
 	}
 
+	/*
+	 * If ZFS_PROP_INHERITID is set, pass the uid and/or gid of the
+	 * mount point to the kernel if they've not been set with the
+	 * uid= or gid= mount options.
+	 */
+	inheritid = zfs_prop_get_int(zhp, ZFS_PROP_INHERITID);
+	if (inheritid > 0) {
+		struct stat mntpointstat;
+
+		error = lstat(mntpoint, &mntpointstat);
+		if (!error) {
+			switch (inheritid) {
+			case ZFS_INHERITID_OFF:
+			default:
+				break;
+			case ZFS_INHERITID_UID:
+				if (!zmo.zmo_uid)
+					zmo.zmo_uid = mntpointstat.st_uid;
+				break;
+			case ZFS_INHERITID_GID:
+				if (!zmo.zmo_gid)
+					zmo.zmo_gid = mntpointstat.st_gid;
+				break;
+			case ZFS_INHERITID_ALL:
+				if (!zmo.zmo_uid)
+					zmo.zmo_uid = mntpointstat.st_uid;
+				if (!zmo.zmo_gid)
+					zmo.zmo_gid = mntpointstat.st_gid;
+				break;
+			}
+		}
+	}
+
 	zfs_close(zhp);
 	libzfs_fini(g_zfs);
 
@@ -565,7 +619,7 @@ main(int argc, char **argv)
 
 	if (!fake) {
 		error = mount(dataset, mntpoint, MNTTYPE_ZFS,
-		    mntflags, mntopts);
+		    mntflags, &zmo);
 	}
 
 	if (error) {

@@ -95,8 +95,12 @@
 #define	MNTOPT_ACL	"acl"		/* passed by util-linux-2.24 mount */
 #define	MNTOPT_NOACL	"noacl"		/* likewise */
 #define	MNTOPT_POSIXACL	"posixacl"	/* likewise */
+#define	MNTOPT_UID	"uid"		/* set uid for all files */
+#define	MNTOPT_GID	"gid"		/* set gid for all files */
 
 #define	ZS_COMMENT	0x00000000	/* comment */
 #define	ZS_ZFSUTIL	0x00000001	/* caller is zfs(8) */
+#define	ZS_UID		0x00000002	/* set zmo_uid */
+#define	ZS_GID		0x00000004	/* set zmo_gid */
 
 #endif	/* _SYS_MNTENT_H */

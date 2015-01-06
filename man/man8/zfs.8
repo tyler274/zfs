@@ -474,10 +474,23 @@ This property is \fBon\fR if the snapshot has been marked for deferred destructi
 The total number of filesystems and volumes that exist under this location in the
 dataset tree.  This value is only available when a \fBfilesystem_limit\fR has
 been set somewhere in the tree under which the dataset resides.
+\fB\fBinheritid=\fBnone\fR | \fBuid\fR | \fBgid\fR | \fBall\fR\fR
+.ad
+.sp .6
+.RS 4n
+The \fBinheritid\fR property causes all files' uid, gid or both to be inherited from the filesystem's mount point and also causes newly-created files, directories and symlinks to inherit the original uid and/or gid of the directory in which they are created.
+.sp
+The inherited ids may also be specified with the \fBuid=\fIid\fR and \fBgid=\fIid\fR mount options (see \fBmount.zfs(8)\fR).
+.sp
+This facility is designed to facilitate the sharing of media between systems on which the users don't have the same uid or gid.
 .RE
 
 .sp
 .ne 2
+<<<<<<< HEAD
+=======
+.mk
+>>>>>>> Add per-mount uid/gid override
 .na
 \fB\fBlogicalreferenced\fR\fR
 .ad

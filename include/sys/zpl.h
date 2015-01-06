@@ -67,7 +67,7 @@ extern void zpl_prune_sb(int64_t nr_to_scan, void *arg);
 
 typedef struct zpl_mount_data {
 	const char *z_osname;	/* Dataset name */
-	void *z_data;		/* Mount options string */
+	void *z_data;		/* Mount options */
 } zpl_mount_data_t;
 
 extern const struct super_operations zpl_super_operations;
