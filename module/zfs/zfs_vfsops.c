@@ -67,6 +67,7 @@
 #include <sys/spa_boot.h>
 #include <sys/zpl.h>
 #include "zfs_comutil.h"
+#include <linux/parser.h>
 
 
 /*ARGSUSED*/
@@ -164,6 +165,9 @@ static void
 acltype_changed_cb(void *arg, uint64_t newval)
 {
 	zfs_sb_t *zsb = arg;
+
+	if (zsb->z_fs_uid || zsb->z_fs_gid)
+		newval = ZFS_ACLTYPE_OFF;
 
 	switch (newval) {
 	case ZFS_ACLTYPE_OFF:
@@ -1207,6 +1211,7 @@ zfs_domount(struct super_block *sb, void *data, int silent)
 {
 	zpl_mount_data_t *zmd = data;
 	const char *osname = zmd->z_osname;
+	const z_mount_opts_t *zmo = zmd->z_data;
 	zfs_sb_t *zsb;
 	struct inode *root_inode;
 	uint64_t recordsize;
@@ -1227,6 +1232,10 @@ zfs_domount(struct super_block *sb, void *data, int silent)
 	sb->s_time_gran = 1;
 	sb->s_blocksize = recordsize;
 	sb->s_blocksize_bits = ilog2(recordsize);
+
+	/* ZFS-specific mount options from z_mount_opts_t */
+	zsb->z_fs_uid = zmo->zmo_uid;
+	zsb->z_fs_gid = zmo->zmo_gid;
 
 #ifdef HAVE_BDI
 	/*
