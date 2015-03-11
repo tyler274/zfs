@@ -82,6 +82,7 @@ static void dbuf_write(dbuf_dirty_record_t *dr, arc_buf_t *data, dmu_tx_t *tx);
  * Global data structures and functions for the dbuf cache.
  */
 static kmem_cache_t *dbuf_cache;
+static kmem_cache_t *dbuf_bonus_cache;
 
 /* ARGSUSED */
 static int
@@ -330,6 +331,10 @@ retry:
 	    sizeof (dmu_buf_impl_t),
 	    0, dbuf_cons, dbuf_dest, NULL, NULL, NULL, 0);
 
+	dbuf_bonus_cache = kmem_cache_create("db_bonus",
+	    DN_MAX_BONUSLEN,
+	    0, NULL, NULL, NULL, NULL, NULL, 0);
+
 	for (i = 0; i < DBUF_MUTEXES; i++)
 		mutex_init(&h->hash_mutexes[i], NULL, MUTEX_FSTRANS, NULL);
 
@@ -355,6 +360,7 @@ dbuf_fini(void)
 #else
 	kmem_free(h->hash_table, (h->hash_table_mask + 1) * sizeof (void *));
 #endif
+	kmem_cache_destroy(dbuf_bonus_cache);
 	kmem_cache_destroy(dbuf_cache);
 }
 
@@ -593,7 +599,7 @@ dbuf_read_impl(dmu_buf_impl_t *db, zio_t *zio, uint32_t *flags)
 		int bonuslen = MIN(dn->dn_bonuslen, dn->dn_phys->dn_bonuslen);
 
 		ASSERT3U(bonuslen, <=, db->db.db_size);
-		db->db.db_data = zio_buf_alloc(DN_MAX_BONUSLEN);
+		db->db.db_data = kmem_cache_alloc(dbuf_bonus_cache, KM_PUSHPAGE);
 		arc_space_consume(DN_MAX_BONUSLEN, ARC_SPACE_OTHER_bonus);
 		if (bonuslen < DN_MAX_BONUSLEN)
 			bzero(db->db.db_data, DN_MAX_BONUSLEN);
@@ -807,7 +813,7 @@ dbuf_fix_old_data(dmu_buf_impl_t *db, uint64_t txg)
 	ASSERT(dr->dr_txg >= txg - 2);
 	if (db->db_blkid == DMU_BONUS_BLKID) {
 		/* Note that the data bufs here are zio_bufs */
-		dr->dt.dl.dr_data = zio_buf_alloc(DN_MAX_BONUSLEN);
+		dr->dt.dl.dr_data = kmem_cache_alloc(dbuf_bonus_cache, KM_PUSHPAGE);
 		arc_space_consume(DN_MAX_BONUSLEN, ARC_SPACE_OTHER_bonus);
 		bcopy(db->db.db_data, dr->dt.dl.dr_data, DN_MAX_BONUSLEN);
 	} else if (refcount_count(&db->db_holds) > db->db_dirtycnt) {
@@ -1629,7 +1635,7 @@ dbuf_clear(dmu_buf_impl_t *db)
 	if (db->db_state == DB_CACHED) {
 		ASSERT(db->db.db_data != NULL);
 		if (db->db_blkid == DMU_BONUS_BLKID) {
-			zio_buf_free(db->db.db_data, DN_MAX_BONUSLEN);
+			kmem_cache_free(dbuf_bonus_cache, db->db.db_data);
 			arc_space_return(DN_MAX_BONUSLEN, ARC_SPACE_OTHER_bonus);
 		}
 		db->db.db_data = NULL;
@@ -2507,7 +2513,7 @@ dbuf_sync_leaf(dbuf_dirty_record_t *dr, dmu_tx_t *tx)
 		DB_DNODE_EXIT(db);
 
 		if (*datap != db->db.db_data) {
-			zio_buf_free(*datap, DN_MAX_BONUSLEN);
+			kmem_cache_free(dbuf_bonus_cache, *datap);
 			arc_space_return(DN_MAX_BONUSLEN, ARC_SPACE_OTHER_bonus);
 		}
 		db->db_data_pending = NULL;
