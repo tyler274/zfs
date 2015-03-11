@@ -275,7 +275,9 @@ typedef struct arc_stats {
 	kstat_named_t arcstat_hdr_size;
 	kstat_named_t arcstat_data_size;
 	kstat_named_t arcstat_meta_size;
-	kstat_named_t arcstat_other_size;
+	kstat_named_t arcstat_other_size_bonus;
+	kstat_named_t arcstat_other_size_dbuf;
+	kstat_named_t arcstat_other_size_dnode;
 	kstat_named_t arcstat_anon_size;
 	kstat_named_t arcstat_anon_evict_data;
 	kstat_named_t arcstat_anon_evict_metadata;
@@ -364,7 +366,9 @@ static arc_stats_t arc_stats = {
 	{ "hdr_size",			KSTAT_DATA_UINT64 },
 	{ "data_size",			KSTAT_DATA_UINT64 },
 	{ "meta_size",			KSTAT_DATA_UINT64 },
-	{ "other_size",			KSTAT_DATA_UINT64 },
+	{ "other_size_bonus",		KSTAT_DATA_UINT64 },
+	{ "other_size_dbuf",		KSTAT_DATA_UINT64 },
+	{ "other_size_dnode",		KSTAT_DATA_UINT64 },
 	{ "anon_size",			KSTAT_DATA_UINT64 },
 	{ "anon_evict_data",		KSTAT_DATA_UINT64 },
 	{ "anon_evict_metadata",	KSTAT_DATA_UINT64 },
@@ -1264,8 +1268,14 @@ arc_space_consume(uint64_t space, arc_space_type_t type)
 	case ARC_SPACE_META:
 		ARCSTAT_INCR(arcstat_meta_size, space);
 		break;
-	case ARC_SPACE_OTHER:
-		ARCSTAT_INCR(arcstat_other_size, space);
+	case ARC_SPACE_OTHER_bonus:
+		ARCSTAT_INCR(arcstat_other_size_bonus, space);
+		break;
+	case ARC_SPACE_OTHER_dbuf:
+		ARCSTAT_INCR(arcstat_other_size_dbuf, space);
+		break;
+	case ARC_SPACE_OTHER_dnode:
+		ARCSTAT_INCR(arcstat_other_size_dnode, space);
 		break;
 	case ARC_SPACE_HDRS:
 		ARCSTAT_INCR(arcstat_hdr_size, space);
@@ -1295,8 +1305,14 @@ arc_space_return(uint64_t space, arc_space_type_t type)
 	case ARC_SPACE_META:
 		ARCSTAT_INCR(arcstat_meta_size, -space);
 		break;
-	case ARC_SPACE_OTHER:
-		ARCSTAT_INCR(arcstat_other_size, -space);
+	case ARC_SPACE_OTHER_bonus:
+		ARCSTAT_INCR(arcstat_other_size_bonus, -space);
+		break;
+	case ARC_SPACE_OTHER_dbuf:
+		ARCSTAT_INCR(arcstat_other_size_dbuf, -space);
+		break;
+	case ARC_SPACE_OTHER_dnode:
+		ARCSTAT_INCR(arcstat_other_size_dnode, -space);
 		break;
 	case ARC_SPACE_HDRS:
 		ARCSTAT_INCR(arcstat_hdr_size, -space);
