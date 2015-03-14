@@ -1621,7 +1621,6 @@ zfs_create_fs(objset_t *os, cred_t *cr, nvlist_t *zplprops, dmu_tx_t *tx)
 	uint64_t	norm = 0;
 	nvpair_t	*elem;
 	int		error;
-	int		i;
 	znode_t		*rootzp = NULL;
 	vattr_t		vattr;
 	znode_t		*zp;
@@ -1731,8 +1730,10 @@ zfs_create_fs(objset_t *os, cred_t *cr, nvlist_t *zplprops, dmu_tx_t *tx)
 	list_create(&zsb->z_all_znodes, sizeof (znode_t),
 	    offsetof(znode_t, z_link_node));
 
-	for (i = 0; i != ZFS_OBJ_MTX_SZ; i++)
-		mutex_init(&zsb->z_hold_mtx[i], NULL, MUTEX_DEFAULT, NULL);
+	mutex_init(&zsb->z_hold_mtx_0, NULL, MUTEX_FSTRANS, NULL);
+	mutex_init(&zsb->z_hold_mtx_1, NULL, MUTEX_FSTRANS, NULL);
+	mutex_init(&zsb->z_hold_mtx_2, NULL, MUTEX_FSTRANS, NULL);
+	mutex_init(&zsb->z_hold_mtx_3, NULL, MUTEX_FSTRANS, NULL);
 
 	VERIFY(0 == zfs_acl_ids_create(rootzp, IS_ROOT_NODE, &vattr,
 	    cr, NULL, &acl_ids));
@@ -1752,8 +1753,10 @@ zfs_create_fs(objset_t *os, cred_t *cr, nvlist_t *zplprops, dmu_tx_t *tx)
 	error = zfs_create_share_dir(zsb, tx);
 	ASSERT(error == 0);
 
-	for (i = 0; i != ZFS_OBJ_MTX_SZ; i++)
-		mutex_destroy(&zsb->z_hold_mtx[i]);
+	mutex_destroy(&zsb->z_hold_mtx_0);
+	mutex_destroy(&zsb->z_hold_mtx_1);
+	mutex_destroy(&zsb->z_hold_mtx_2);
+	mutex_destroy(&zsb->z_hold_mtx_3);
 
 	kmem_free(sb, sizeof (struct super_block));
 	kmem_free(zsb, sizeof (zfs_sb_t));

@@ -276,9 +276,16 @@ typedef struct znode {
 /*
  * Macros for dealing with dmu_buf_hold
  */
-#define	ZFS_OBJ_HASH(obj_num)	((obj_num) & (ZFS_OBJ_MTX_SZ - 1))
-#define	ZFS_OBJ_MUTEX(zsb, obj_num)	\
-	(&(zsb)->z_hold_mtx[ZFS_OBJ_HASH(obj_num)])
+#define	ZFS_OBJ_MUTEX(zsb, obj_num)			\
+({							\
+	int hash = obj_num % 3;				\
+	kmutex_t *rv;					\
+	if (hash == 0) rv = &(zsb)->z_hold_mtx_0;	\
+	else if (hash == 1) rv = &(zsb)->z_hold_mtx_1;	\
+	else if (hash == 2) rv = &(zsb)->z_hold_mtx_2;	\
+	else rv = &(zsb)->z_hold_mtx_3;			\
+	rv;						\
+})
 #define	ZFS_OBJ_HOLD_ENTER(zsb, obj_num) \
 	mutex_enter(ZFS_OBJ_MUTEX((zsb), (obj_num)))
 #define	ZFS_OBJ_HOLD_TRYENTER(zsb, obj_num) \

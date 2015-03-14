@@ -650,7 +650,7 @@ zfs_sb_create(const char *osname, zfs_sb_t **zsbp)
 	objset_t *os;
 	zfs_sb_t *zsb;
 	uint64_t zval;
-	int i, error;
+	int error;
 	uint64_t sa_obj;
 
 	zsb = kmem_zalloc(sizeof (zfs_sb_t), KM_SLEEP);
@@ -776,8 +776,10 @@ zfs_sb_create(const char *osname, zfs_sb_t **zsbp)
 	rrw_init(&zsb->z_teardown_lock, B_FALSE);
 	rw_init(&zsb->z_teardown_inactive_lock, NULL, RW_DEFAULT, NULL);
 	rw_init(&zsb->z_fuid_lock, NULL, RW_DEFAULT, NULL);
-	for (i = 0; i != ZFS_OBJ_MTX_SZ; i++)
-		mutex_init(&zsb->z_hold_mtx[i], NULL, MUTEX_DEFAULT, NULL);
+	mutex_init(&zsb->z_hold_mtx_0, NULL, MUTEX_FSTRANS, NULL);
+	mutex_init(&zsb->z_hold_mtx_1, NULL, MUTEX_FSTRANS, NULL);
+	mutex_init(&zsb->z_hold_mtx_2, NULL, MUTEX_FSTRANS, NULL);
+	mutex_init(&zsb->z_hold_mtx_3, NULL, MUTEX_FSTRANS, NULL);
 
 	avl_create(&zsb->z_ctldir_snaps, snapentry_compare,
 	    sizeof (zfs_snapentry_t), offsetof(zfs_snapentry_t, se_node));
@@ -880,8 +882,6 @@ EXPORT_SYMBOL(zfs_sb_setup);
 void
 zfs_sb_free(zfs_sb_t *zsb)
 {
-	int i;
-
 	zfs_fuid_destroy(zsb);
 
 	mutex_destroy(&zsb->z_znodes_lock);
@@ -890,8 +890,10 @@ zfs_sb_free(zfs_sb_t *zsb)
 	rrw_destroy(&zsb->z_teardown_lock);
 	rw_destroy(&zsb->z_teardown_inactive_lock);
 	rw_destroy(&zsb->z_fuid_lock);
-	for (i = 0; i != ZFS_OBJ_MTX_SZ; i++)
-		mutex_destroy(&zsb->z_hold_mtx[i]);
+	mutex_destroy(&zsb->z_hold_mtx_0);
+	mutex_destroy(&zsb->z_hold_mtx_1);
+	mutex_destroy(&zsb->z_hold_mtx_2);
+	mutex_destroy(&zsb->z_hold_mtx_3);
 	mutex_destroy(&zsb->z_ctldir_lock);
 	avl_destroy(&zsb->z_ctldir_snaps);
 	kmem_free(zsb, sizeof (zfs_sb_t));
