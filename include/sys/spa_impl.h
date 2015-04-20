@@ -123,6 +123,8 @@ typedef enum spa_all_vdev_zap_action {
 	AVZ_ACTION_REBUILD	/* Populate the new AVZ, see spa_avz_rebuild */
 } spa_avz_action_t;
 
+typedef struct spa_trimstats spa_trimstats_t;
+
 struct spa {
 	/*
 	 * Fields protected by spa_namespace_lock.
@@ -266,6 +268,21 @@ struct spa {
 	uint64_t	spa_deadman_synctime;	/* deadman expiration timer */
 	uint64_t	spa_all_vdev_zaps;	/* ZAP of per-vd ZAP obj #s */
 	spa_avz_action_t	spa_avz_action;	/* destroy/rebuild AVZ? */
+	uint64_t	spa_force_trim;		/* force sending trim? */
+	uint64_t	spa_auto_trim;		/* in-line switch */
+
+	/* On-demand TRIM */
+	kmutex_t	spa_trim_lock;
+	uint64_t	spa_trim_rate;		/* rate of trim in bytes/sec */
+	uint64_t	spa_num_trimming;	/* num of trimming threads */
+	boolean_t	spa_trim_stop;		/* requested a trim stop */
+	kcondvar_t	spa_trim_update_cv;	/* updates to TRIM settings */
+	kcondvar_t	spa_trim_done_cv;	/* trim on a vdev is done */
+
+	/* TRIM/UNMAP kstats */
+	spa_trimstats_t	*spa_trimstats;		/* alloc'd by kstat_create */
+	kstat_t		*spa_trimstats_ks;
+
 	uint64_t	spa_errata;		/* errata issues detected */
 	spa_stats_t	spa_stats;		/* assorted spa statistics */
 	hrtime_t	spa_ccw_fail_time;	/* Conf cache write fail time */
@@ -281,6 +298,9 @@ struct spa {
 	refcount_t	spa_refcount;		/* number of opens */
 
 	taskq_t		*spa_upgrade_taskq;	/* taskq for upgrade jobs */
+
+	/* Only manipulated in syncing context, so no locking reqd. */
+	taskq_t *spa_auto_trim_taskq;
 };
 
 extern char *spa_config_path;
@@ -290,6 +310,8 @@ extern void spa_taskq_dispatch_ent(spa_t *spa, zio_type_t t, zio_taskq_type_t q,
 extern void spa_taskq_dispatch_sync(spa_t *, zio_type_t t, zio_taskq_type_t q,
     task_func_t *func, void *arg, uint_t flags);
 
+extern void spa_auto_trim_taskq_create(spa_t *spa);
+extern void spa_auto_trim_taskq_destroy(spa_t *spa);
 
 #ifdef	__cplusplus
 }

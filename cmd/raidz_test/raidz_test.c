@@ -287,10 +287,12 @@ init_raidz_golden_map(raidz_test_opts_t *opts, const int parity)
 
 	VERIFY0(vdev_raidz_impl_set("original"));
 
-	opts->rm_golden = vdev_raidz_map_alloc(opts->zio_golden,
-	    opts->rto_ashift, total_ncols, parity);
-	rm_test = vdev_raidz_map_alloc(zio_test,
-	    opts->rto_ashift, total_ncols, parity);
+	opts->rm_golden = vdev_raidz_map_alloc(opts->zio_golden->io_data,
+	    opts->rto_dsize, opts->rto_offset,
+	    opts->rto_ashift, total_ncols, parity, B_TRUE);
+	rm_test = vdev_raidz_map_alloc(zio_test->io_data,
+	    zio_test->io_size, zio_test->io_offset,
+	    opts->rto_ashift, total_ncols, parity, B_TRUE);
 
 	VERIFY(opts->zio_golden);
 	VERIFY(opts->rm_golden);
@@ -329,9 +331,8 @@ init_raidz_map(raidz_test_opts_t *opts, zio_t **zio, const int parity)
 	(*zio)->io_data = raidz_alloc(alloc_dsize);
 	init_zio_data(*zio);
 
-	rm = vdev_raidz_map_alloc(*zio, opts->rto_ashift,
-		total_ncols, parity);
-	VERIFY(rm);
+	rm = vdev_raidz_map_alloc((*zio)->io_data, alloc_dsize, 0,
+	    opts->rto_ashift, total_ncols, parity, B_TRUE);
 
 	/* Make sure code columns are destroyed */
 	corrupt_colums(rm, ccols, parity);
