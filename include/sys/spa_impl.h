@@ -116,6 +116,8 @@ typedef struct spa_taskqs {
 	taskq_t **stqs_taskq;
 } spa_taskqs_t;
 
+typedef struct spa_trimstats spa_trimstats_t;
+
 struct spa {
 	/*
 	 * Fields protected by spa_namespace_lock.
@@ -251,6 +253,21 @@ struct spa {
 	uint64_t	spa_deadman_calls;	/* number of deadman calls */
 	hrtime_t	spa_sync_starttime;	/* starting time of spa_sync */
 	uint64_t	spa_deadman_synctime;	/* deadman expiration timer */
+	uint64_t	spa_force_trim;		/* force sending trim? */
+	uint64_t	spa_auto_trim;		/* in-line switch */
+
+	/* On-demand TRIM */
+	kmutex_t	spa_trim_lock;
+	uint64_t	spa_trim_rate;		/* rate of trim in bytes/sec */
+	uint64_t	spa_num_trimming;	/* num of trimming threads */
+	boolean_t	spa_trim_stop;		/* requested a trim stop */
+	kcondvar_t	spa_trim_update_cv;	/* updates to TRIM settings */
+	kcondvar_t	spa_trim_done_cv;	/* trim on a vdev is done */
+
+	/* TRIM/UNMAP kstats */
+	spa_trimstats_t	*spa_trimstats;		/* alloc'd by kstat_create */
+	kstat_t		*spa_trimstats_ks;
+
 	uint64_t	spa_errata;		/* errata issues detected */
 	spa_stats_t	spa_stats;		/* assorted spa statistics */
 	taskq_t		*spa_zvol_taskq;	/* Taskq for minor managment */
@@ -263,6 +280,9 @@ struct spa {
 	 */
 	spa_config_lock_t spa_config_lock[SCL_LOCKS]; /* config changes */
 	refcount_t	spa_refcount;		/* number of opens */
+
+	/* Only manipulated in syncing context, so no locking reqd. */
+	taskq_t *spa_auto_trim_taskq;
 };
 
 extern char *spa_config_path;
@@ -272,6 +292,8 @@ extern void spa_taskq_dispatch_ent(spa_t *spa, zio_type_t t, zio_taskq_type_t q,
 extern void spa_taskq_dispatch_sync(spa_t *, zio_type_t t, zio_taskq_type_t q,
     task_func_t *func, void *arg, uint_t flags);
 
+extern void spa_auto_trim_taskq_create(spa_t *spa);
+extern void spa_auto_trim_taskq_destroy(spa_t *spa);
 
 #ifdef	__cplusplus
 }

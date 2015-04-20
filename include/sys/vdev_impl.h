@@ -65,6 +65,7 @@ typedef void	vdev_io_done_func_t(zio_t *zio);
 typedef void	vdev_state_change_func_t(vdev_t *vd, int, int);
 typedef void	vdev_hold_func_t(vdev_t *vd);
 typedef void	vdev_rele_func_t(vdev_t *vd);
+typedef void	vdev_trim_func_t(vdev_t *vd, zio_t *pio, void *trim_exts);
 
 typedef const struct vdev_ops {
 	vdev_open_func_t		*vdev_op_open;
@@ -75,6 +76,7 @@ typedef const struct vdev_ops {
 	vdev_state_change_func_t	*vdev_op_state_change;
 	vdev_hold_func_t		*vdev_op_hold;
 	vdev_rele_func_t		*vdev_op_rele;
+	vdev_trim_func_t		*vdev_op_trim;
 	char				vdev_op_type[16];
 	boolean_t			vdev_op_leaf;
 } vdev_ops_t;
@@ -121,6 +123,14 @@ struct vdev_queue {
 	zio_t		vq_io_search; /* used as local for stack reduction */
 	kmutex_t	vq_lock;
 };
+
+/*
+ * Compound argument to vdev_auto_trim().
+ */
+typedef struct vdev_auto_trim_info {
+	vdev_t		*vati_vdev;
+	uint64_t	vati_txg;
+} vdev_auto_trim_info_t;
 
 /*
  * Virtual device descriptor
@@ -177,6 +187,8 @@ struct vdev {
 	uint64_t	vdev_removing;	/* device is being removed?	*/
 	boolean_t	vdev_ishole;	/* is a hole in the namespace 	*/
 
+	uint64_t	vdev_trim_prog;	/* trim progress in bytes	*/
+
 	/*
 	 * Leaf vdev state.
 	 */
@@ -199,6 +211,7 @@ struct vdev {
 	uint64_t	vdev_not_present; /* not present during import	*/
 	uint64_t	vdev_unspare;	/* unspare when resilvering done */
 	boolean_t	vdev_nowritecache; /* true if flushwritecache failed */
+	boolean_t	vdev_notrim;	/* true if Unmap/TRIM is unsupported */
 	boolean_t	vdev_checkremove; /* temporary online test	*/
 	boolean_t	vdev_forcefault; /* force online fault		*/
 	boolean_t	vdev_splitting;	/* split or repair in progress  */
@@ -317,6 +330,7 @@ extern void vdev_sync(vdev_t *vd, uint64_t txg);
 extern void vdev_sync_done(vdev_t *vd, uint64_t txg);
 extern void vdev_dirty(vdev_t *vd, int flags, void *arg, uint64_t txg);
 extern void vdev_dirty_leaves(vdev_t *vd, int flags, uint64_t txg);
+extern void vdev_auto_trim(vdev_auto_trim_info_t *vd);
 
 /*
  * Available vdev types.

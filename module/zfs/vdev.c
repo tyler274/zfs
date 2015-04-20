@@ -44,6 +44,7 @@
 #include <sys/zil.h>
 #include <sys/dsl_scan.h>
 #include <sys/zvol.h>
+#include <sys/trace_vdev.h>
 
 /*
  * When a vdev is added, it will be divided into approximately (but no
@@ -2303,6 +2304,22 @@ vdev_sync(vdev_t *vd, uint64_t txg)
 	(void) txg_list_add(&spa->spa_vdev_txg_list, vd, TXG_CLEAN(txg));
 }
 
+/*
+ * Runs through all metaslabs on the vdev and does their autotrim processing.
+ */
+void
+vdev_auto_trim(vdev_auto_trim_info_t *vati)
+{
+	vdev_t *vd = vati->vati_vdev;
+	spa_t *spa = vd->vdev_spa;
+	uint64_t i, txg = vati->vati_txg;
+
+	for (i = 0; i < vd->vdev_ms_count; i++)
+		metaslab_auto_trim(vd->vdev_ms[i], txg);
+	spa_config_exit(spa, SCL_TRIM_ALL, vati);
+	kmem_free(vati, sizeof (*vati));
+}
+
 uint64_t
 vdev_psize_to_asize(vdev_t *vd, uint64_t psize)
 {
@@ -3432,6 +3449,84 @@ vdev_deadman(vdev_t *vd)
 		}
 		mutex_exit(&vq->vq_lock);
 	}
+}
+
+/*
+ * Implements the per-vdev portion of on-demand TRIM. The function passes
+ * over all metaslabs on this vdev and performs a metaslab_trim_all
+ * on them. It's is also responsible for rate-control if spa_trim_rate is
+ * non-zero.
+ */
+void
+vdev_trim_all(vdev_trim_info_t *vti)
+{
+	clock_t t = ddi_get_lbolt();
+	spa_t *spa = vti->vti_vdev->vdev_spa;
+	vdev_t *vd = vti->vti_vdev;
+	uint64_t i;
+
+	vd->vdev_trim_prog = 0;
+
+	spa_config_enter(spa, SCL_TRIM_ALL, FTAG, RW_READER);
+	for (i = 0; i < vti->vti_vdev->vdev_ms_count &&
+	    !spa->spa_trim_stop; i++) {
+		uint64_t delta;
+		metaslab_t *msp = vd->vdev_ms[i];
+		zio_t *trim_io = metaslab_trim_all(msp, &delta);
+
+		atomic_add_64(&vd->vdev_trim_prog, msp->ms_size);
+		spa_config_exit(spa, SCL_TRIM_ALL, FTAG);
+
+		(void) zio_wait(trim_io);
+
+		/* delay loop to handle fixed-rate trimming */
+		for (;;) {
+			uint64_t rate = spa->spa_trim_rate;
+			uint64_t sleep_delay;
+
+			if (rate == 0) {
+				/* No delay, just update 't' and move on. */
+				t = ddi_get_lbolt();
+				break;
+			}
+
+			sleep_delay = (delta * hz) / rate;
+			mutex_enter(&spa->spa_trim_lock);
+			(void) cv_timedwait(&spa->spa_trim_update_cv,
+			    &spa->spa_trim_lock, t);
+			mutex_exit(&spa->spa_trim_lock);
+
+			/* If interrupted, don't try to relock, get out */
+			if (spa->spa_trim_stop)
+				goto out;
+
+			/* Timeout passed, move on to the next metaslab. */
+			if (ddi_get_lbolt() >= t + sleep_delay) {
+				t += sleep_delay;
+				break;
+			}
+		}
+		while (!spa_config_tryenter(spa, SCL_TRIM_ALL, FTAG,
+		    RW_READER)) {
+			if (spa->spa_trim_stop)
+				goto out;
+#ifdef	_KERNEL
+			delay(USEC_TO_TICK(10000));
+#endif
+		}
+	}
+	spa_config_exit(spa, SCL_TRIM_ALL, FTAG);
+out:
+	/*
+	 * Ensure we're marked as "completed" even if we've had to stop
+	 * before processing all metaslabs.
+	 */
+	vd->vdev_trim_prog = vd->vdev_asize;
+
+	ASSERT(vti->vti_done != NULL);
+	vti->vti_done(vti);
+
+	kmem_free(vti, sizeof (*vti));
 }
 
 #if defined(_KERNEL) && defined(HAVE_SPL)
