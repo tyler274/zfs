@@ -46,6 +46,7 @@
 #include <sys/zfs_znode.h>
 #include <sys/zvol.h>
 #include <linux/blkdev_compat.h>
+#include <sys/dkioc_free_util.h>
 
 unsigned int zvol_inhibit_dev = 0;
 unsigned int zvol_major = ZVOL_MAJOR;
