@@ -228,6 +228,8 @@ extern "C" {
 #define	ESC_ZFS_POOL_DESTROY	"ESC_ZFS_pool_destroy"
 #define	ESC_ZFS_VDEV_CLEAR	"ESC_ZFS_vdev_clear"
 #define	ESC_ZFS_VDEV_CHECK	"ESC_ZFS_vdev_check"
+#define	ESC_ZFS_TRIM_START	"ESC_ZFS_trim_start"
+#define	ESC_ZFS_TRIM_FINISH	"ESC_ZFS_trim_finish"
 
 #ifdef	__cplusplus
 }

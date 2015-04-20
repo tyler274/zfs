@@ -225,6 +225,20 @@
  * manipulation of the namespace.
  */
 
+typedef struct spa_trimstats {
+	kstat_named_t	st_extents;
+	kstat_named_t	st_bytes;
+	kstat_named_t	st_extents_skipped;
+	kstat_named_t	st_bytes_skipped;
+} spa_trimstats_t;
+
+static spa_trimstats_t spa_trimstats_template = {
+	{ "extents",		KSTAT_DATA_UINT64 },
+	{ "bytes",		KSTAT_DATA_UINT64 },
+	{ "extents_skipped",	KSTAT_DATA_UINT64 },
+	{ "bytes_skipped",	KSTAT_DATA_UINT64 },
+};
+
 static avl_tree_t spa_namespace_avl;
 kmutex_t spa_namespace_lock;
 static kcondvar_t spa_namespace_cv;
@@ -336,6 +350,9 @@ int spa_asize_inflation = 24;
  * See also the comments in zfs_space_check_t.
  */
 int spa_slop_shift = 5;
+
+static void spa_trimstats_create(spa_t *spa);
+static void spa_trimstats_destroy(spa_t *spa);
 
 /*
  * ==========================================================================
@@ -561,12 +578,15 @@ spa_add(const char *name, nvlist_t *config, const char *altroot)
 	mutex_init(&spa->spa_suspend_lock, NULL, MUTEX_DEFAULT, NULL);
 	mutex_init(&spa->spa_vdev_top_lock, NULL, MUTEX_DEFAULT, NULL);
 	mutex_init(&spa->spa_feat_stats_lock, NULL, MUTEX_DEFAULT, NULL);
+	mutex_init(&spa->spa_trim_lock, NULL, MUTEX_DEFAULT, NULL);
 
 	cv_init(&spa->spa_async_cv, NULL, CV_DEFAULT, NULL);
 	cv_init(&spa->spa_evicting_os_cv, NULL, CV_DEFAULT, NULL);
 	cv_init(&spa->spa_proc_cv, NULL, CV_DEFAULT, NULL);
 	cv_init(&spa->spa_scrub_io_cv, NULL, CV_DEFAULT, NULL);
 	cv_init(&spa->spa_suspend_cv, NULL, CV_DEFAULT, NULL);
+	cv_init(&spa->spa_trim_update_cv, NULL, CV_DEFAULT, NULL);
+	cv_init(&spa->spa_trim_done_cv, NULL, CV_DEFAULT, NULL);
 
 	for (t = 0; t < TXG_SIZE; t++)
 		bplist_create(&spa->spa_free_bplist[t]);
@@ -622,6 +642,8 @@ spa_add(const char *name, nvlist_t *config, const char *altroot)
 		VERIFY(nvlist_alloc(&spa->spa_label_features, NV_UNIQUE_NAME,
 		    KM_SLEEP) == 0);
 	}
+
+	spa_trimstats_create(spa);
 
 	spa->spa_debug = ((zfs_flags & ZFS_DEBUG_SPA) != 0);
 
@@ -682,6 +704,8 @@ spa_remove(spa_t *spa)
 	spa_stats_destroy(spa);
 	spa_config_lock_destroy(spa);
 
+	spa_trimstats_destroy(spa);
+
 	for (t = 0; t < TXG_SIZE; t++)
 		bplist_destroy(&spa->spa_free_bplist[t]);
 
@@ -690,6 +714,8 @@ spa_remove(spa_t *spa)
 	cv_destroy(&spa->spa_proc_cv);
 	cv_destroy(&spa->spa_scrub_io_cv);
 	cv_destroy(&spa->spa_suspend_cv);
+	cv_destroy(&spa->spa_trim_update_cv);
+	cv_destroy(&spa->spa_trim_done_cv);
 
 	mutex_destroy(&spa->spa_async_lock);
 	mutex_destroy(&spa->spa_errlist_lock);
@@ -702,6 +728,7 @@ spa_remove(spa_t *spa)
 	mutex_destroy(&spa->spa_suspend_lock);
 	mutex_destroy(&spa->spa_vdev_top_lock);
 	mutex_destroy(&spa->spa_feat_stats_lock);
+	mutex_destroy(&spa->spa_trim_lock);
 
 	kmem_free(spa, sizeof (spa_t));
 }
@@ -1713,6 +1740,18 @@ spa_deadman_synctime(spa_t *spa)
 	return (spa->spa_deadman_synctime);
 }
 
+spa_force_trim_t
+spa_get_force_trim(spa_t *spa)
+{
+	return (spa->spa_force_trim);
+}
+
+spa_auto_trim_t
+spa_get_auto_trim(spa_t *spa)
+{
+	return (spa->spa_auto_trim);
+}
+
 uint64_t
 dva_get_dsize_sync(spa_t *spa, const dva_t *dva)
 {
@@ -1995,6 +2034,79 @@ spa_maxblocksize(spa_t *spa)
 		return (SPA_MAXBLOCKSIZE);
 	else
 		return (SPA_OLD_MAXBLOCKSIZE);
+}
+
+static void
+spa_trimstats_create(spa_t *spa)
+{
+	char name[KSTAT_STRLEN];
+
+	if (spa->spa_name[0] == '$')
+		return;
+
+	ASSERT3P(spa->spa_trimstats, ==, NULL);
+	ASSERT3P(spa->spa_trimstats_ks, ==, NULL);
+
+	(void) snprintf(name, KSTAT_STRLEN, "zfs/%s", spa_name(spa));
+	spa->spa_trimstats_ks = kstat_create(name, 0, "trimstats", "misc",
+	    KSTAT_TYPE_NAMED, sizeof (spa_trimstats_template) /
+	    sizeof (kstat_named_t), KSTAT_FLAG_VIRTUAL);
+	if (spa->spa_trimstats_ks) {
+		spa->spa_trimstats = kmem_alloc(sizeof (spa_trimstats_t), KM_SLEEP);
+		*spa->spa_trimstats = spa_trimstats_template;
+		spa->spa_trimstats_ks->ks_data = spa->spa_trimstats;
+		kstat_install(spa->spa_trimstats_ks);
+	} else {
+		cmn_err(CE_NOTE, "!Cannot create trim kstats for pool %s",
+		    spa->spa_name);
+	}
+}
+
+static void
+spa_trimstats_destroy(spa_t *spa)
+{
+	if (spa->spa_trimstats_ks) {
+		kstat_delete(spa->spa_trimstats_ks);
+		kmem_free(spa->spa_trimstats, sizeof (spa_trimstats_t));
+		spa->spa_trimstats_ks = NULL;
+	}
+}
+
+void
+spa_trimstats_update(spa_t *spa, uint64_t extents, uint64_t bytes,
+    uint64_t extents_skipped, uint64_t bytes_skipped)
+{
+	spa_trimstats_t *st = spa->spa_trimstats;
+	if (st) {
+		atomic_add_64(&st->st_extents.value.ui64, extents);
+		atomic_add_64(&st->st_bytes.value.ui64, bytes);
+		atomic_add_64(&st->st_extents_skipped.value.ui64,
+		    extents_skipped);
+		atomic_add_64(&st->st_bytes_skipped.value.ui64,
+		    bytes_skipped);
+	}
+}
+
+void
+spa_auto_trim_taskq_create(spa_t *spa)
+{
+	char *name;
+
+	ASSERT3P(spa->spa_auto_trim_taskq, ==, NULL);
+
+	name = kmem_alloc(MAXPATHLEN, KM_SLEEP);
+	(void) snprintf(name, MAXPATHLEN, "%s_auto_trim", spa->spa_name);
+	spa->spa_auto_trim_taskq = taskq_create(name, 1, minclsyspri, 1,
+	    spa->spa_root_vdev->vdev_children, TASKQ_DYNAMIC);
+	kmem_free(name, MAXPATHLEN);
+}
+
+void
+spa_auto_trim_taskq_destroy(spa_t *spa)
+{
+	ASSERT(spa->spa_auto_trim_taskq != NULL);
+	taskq_destroy(spa->spa_auto_trim_taskq);
+	spa->spa_auto_trim_taskq = NULL;
 }
 
 #if defined(_KERNEL) && defined(HAVE_SPL)
