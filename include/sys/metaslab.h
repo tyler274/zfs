@@ -54,6 +54,7 @@ void metaslab_sync(metaslab_t *, uint64_t);
 void metaslab_sync_done(metaslab_t *, uint64_t);
 void metaslab_sync_reassess(metaslab_group_t *);
 uint64_t metaslab_block_maxsize(metaslab_t *);
+void metaslab_auto_trim(metaslab_t *msp, uint64_t txg);
 
 #define	METASLAB_HINTBP_FAVOR		0x0
 #define	METASLAB_HINTBP_AVOID		0x1
@@ -68,6 +69,7 @@ int metaslab_alloc(spa_t *, metaslab_class_t *, uint64_t,
 void metaslab_free(spa_t *, const blkptr_t *, uint64_t, boolean_t);
 int metaslab_claim(spa_t *, const blkptr_t *, uint64_t);
 void metaslab_check_free(spa_t *, const blkptr_t *);
+zio_t *metaslab_trim_all(metaslab_t *, uint64_t *);
 void metaslab_fastwrite_mark(spa_t *, const blkptr_t *);
 void metaslab_fastwrite_unmark(spa_t *, const blkptr_t *);
 
@@ -99,6 +101,9 @@ uint64_t metaslab_group_fragmentation(metaslab_group_t *);
 void metaslab_group_histogram_remove(metaslab_group_t *, metaslab_t *);
 void metaslab_group_alloc_decrement(spa_t *, uint64_t, void *, int);
 void metaslab_group_alloc_verify(spa_t *, const blkptr_t *, void *);
+
+void metaslab_trimstats_create(spa_t *spa);
+void metaslab_trimstats_destroy(spa_t *spa);
 
 #ifdef	__cplusplus
 }

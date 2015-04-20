@@ -577,6 +577,28 @@ typedef enum spa_import_type {
 	SPA_IMPORT_ASSEMBLE
 } spa_import_type_t;
 
+/*
+ * Should we force sending TRIM commands even to devices which evidently
+ * don't support it?
+ *	OFF: no, only send to devices which indicated support
+ *	ON: yes, force send to everybody
+ */
+typedef enum {
+	SPA_FORCE_TRIM_OFF = 0,	/* default */
+	SPA_FORCE_TRIM_ON
+} spa_force_trim_t;
+
+/*
+ * Should we send TRIM commands in-line during normal pool operation while
+ * deleting stuff?
+ *	OFF: no
+ *	ON: yes
+ */
+typedef enum {
+	SPA_AUTO_TRIM_OFF = 0,	/* default */
+	SPA_AUTO_TRIM_ON
+} spa_auto_trim_t;
+
 /* state manipulation functions */
 extern int spa_open(const char *pool, spa_t **, void *tag);
 extern int spa_open_rewind(const char *pool, spa_t **, void *tag,
@@ -647,6 +669,11 @@ extern void spa_l2cache_drop(spa_t *spa);
 extern int spa_scan(spa_t *spa, pool_scan_func_t func);
 extern int spa_scan_stop(spa_t *spa);
 
+/* trimming */
+extern void spa_trim(spa_t *spa, uint64_t rate);
+extern void spa_trim_stop(spa_t *spa);
+extern uint64_t spa_get_trim_prog(spa_t *spa);
+
 /* spa syncing */
 extern void spa_sync(spa_t *spa, uint64_t txg); /* only for DMU use */
 extern void spa_sync_allpools(void);
@@ -698,6 +725,7 @@ extern boolean_t spa_refcount_zero(spa_t *spa);
 #define	SCL_LOCKS	7
 #define	SCL_ALL		((1 << SCL_LOCKS) - 1)
 #define	SCL_STATE_ALL	(SCL_STATE | SCL_L2ARC | SCL_ZIO)
+#define	SCL_TRIM_ALL	(SCL_STATE | SCL_ZIO)
 
 /* Historical pool statistics */
 typedef struct spa_stats_history {
@@ -806,6 +834,8 @@ extern uint64_t spa_bootfs(spa_t *spa);
 extern uint64_t spa_delegation(spa_t *spa);
 extern objset_t *spa_meta_objset(spa_t *spa);
 extern uint64_t spa_deadman_synctime(spa_t *spa);
+extern spa_force_trim_t spa_get_force_trim(spa_t *spa);
+extern spa_auto_trim_t spa_get_auto_trim(spa_t *spa);
 
 /* Miscellaneous support routines */
 extern void spa_activate_mos_feature(spa_t *spa, const char *feature,
@@ -888,6 +918,10 @@ extern void spa_configfile_set(spa_t *, nvlist_t *, boolean_t);
 
 /* asynchronous event notification */
 extern void spa_event_notify(spa_t *spa, vdev_t *vdev, const char *name);
+
+/* TRIM/UNMAP kstat update */
+extern void spa_trimstats_update(spa_t *spa, uint64_t extents, uint64_t bytes,
+    uint64_t extents_skipped, uint64_t bytes_skipped);
 
 #ifdef ZFS_DEBUG
 #define	dprintf_bp(bp, fmt, ...) do {				\
