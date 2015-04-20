@@ -149,6 +149,9 @@ static inline int spa_load_impl(spa_t *spa, uint64_t, nvlist_t *config,
     spa_load_state_t state, spa_import_type_t type, boolean_t mosconfig,
     char **ereport);
 static void spa_vdev_resilver_done(spa_t *spa);
+static void spa_vdev_trim_all_done(vdev_trim_info_t *vti);
+static uint64_t spa_min_trim_rate(spa_t *spa);
+static void spa_trim_stop_wait(spa_t *spa);
 
 uint_t		zio_taskq_batch_pct = 75;	/* 1 thread per cpu in pset */
 id_t		zio_taskq_psrset_bind = PS_NONE;
@@ -476,6 +479,8 @@ spa_prop_validate(spa_t *spa, nvlist_t *props)
 		case ZPOOL_PROP_AUTOREPLACE:
 		case ZPOOL_PROP_LISTSNAPS:
 		case ZPOOL_PROP_AUTOEXPAND:
+		case ZPOOL_PROP_FORCETRIM:
+		case ZPOOL_PROP_AUTOTRIM:
 			error = nvpair_value_uint64(elem, &intval);
 			if (!error && intval > 1)
 				error = SET_ERROR(EINVAL);
@@ -1310,6 +1315,12 @@ spa_unload(spa_t *spa)
 	spa_async_suspend(spa);
 
 	/*
+	 * Stop autotrim tasks.
+	 */
+	if (spa->spa_auto_trim_taskq)
+		spa_auto_trim_taskq_destroy(spa);
+
+	/*
 	 * Stop syncing.
 	 */
 	if (spa->spa_sync_on) {
@@ -1330,6 +1341,8 @@ spa_unload(spa_t *spa)
 	bpobj_close(&spa->spa_deferred_bpobj);
 
 	spa_config_enter(spa, SCL_ALL, FTAG, RW_WRITER);
+
+	spa_trim_stop_wait(spa);
 
 	/*
 	 * Close all vdevs.
@@ -2810,6 +2823,10 @@ spa_load_impl(spa_t *spa, uint64_t pool_guid, nvlist_t *config,
 		spa_prop_find(spa, ZPOOL_PROP_AUTOEXPAND, &spa->spa_autoexpand);
 		spa_prop_find(spa, ZPOOL_PROP_DEDUPDITTO,
 		    &spa->spa_dedup_ditto);
+		spa_prop_find(spa, ZPOOL_PROP_FORCETRIM, &spa->spa_force_trim);
+		spa_prop_find(spa, ZPOOL_PROP_AUTOTRIM, &spa->spa_auto_trim);
+		if (spa->spa_auto_trim == SPA_AUTO_TRIM_ON)
+			spa_auto_trim_taskq_create(spa);
 
 		spa->spa_autoreplace = (autoreplace != 0);
 	}
@@ -3937,6 +3954,10 @@ spa_create(const char *pool, nvlist_t *nvroot, nvlist_t *props,
 	spa->spa_delegation = zpool_prop_default_numeric(ZPOOL_PROP_DELEGATION);
 	spa->spa_failmode = zpool_prop_default_numeric(ZPOOL_PROP_FAILUREMODE);
 	spa->spa_autoexpand = zpool_prop_default_numeric(ZPOOL_PROP_AUTOEXPAND);
+	spa->spa_force_trim = zpool_prop_default_numeric(ZPOOL_PROP_FORCETRIM);
+	spa->spa_auto_trim = zpool_prop_default_numeric(ZPOOL_PROP_AUTOTRIM);
+	if (spa->spa_auto_trim == SPA_AUTO_TRIM_ON)
+		spa_auto_trim_taskq_create(spa);
 
 	if (props != NULL) {
 		spa_configfile_set(spa, props, B_FALSE);
@@ -4745,6 +4766,7 @@ spa_vdev_detach(spa_t *spa, uint64_t guid, uint64_t pguid, int replace_done)
 	ASSERT(spa_writeable(spa));
 
 	txg = spa_vdev_enter(spa);
+	spa_trim_stop_wait(spa);
 
 	vd = spa_lookup_by_guid(spa, guid, B_FALSE);
 
@@ -4900,8 +4922,11 @@ spa_vdev_detach(spa_t *spa, uint64_t guid, uint64_t pguid, int replace_done)
 	 * just detached was smaller than the others, it may be possible to
 	 * add metaslabs (i.e. grow the pool). We need to reopen the vdev
 	 * first so that we can obtain the updated sizes of the leaf vdevs.
+	 * Be sure to shut down any on-demand TRIMs prior to manipulating
+	 * metaslabs.
 	 */
 	if (spa->spa_autoexpand) {
+		spa_trim_stop_wait(spa);
 		vdev_reopen(tvd);
 		vdev_expand(tvd, txg);
 	}
@@ -4985,6 +5010,7 @@ spa_vdev_split_mirror(spa_t *spa, char *newname, nvlist_t *config,
 	ASSERT(spa_writeable(spa));
 
 	txg = spa_vdev_enter(spa);
+	spa_trim_stop_wait(spa);
 
 	/* clear the log and flush everything up to now */
 	activate_slog = spa_passivate_log(spa);
@@ -5417,6 +5443,8 @@ spa_vdev_remove(spa_t *spa, uint64_t guid, boolean_t unspare)
 
 	if (!locked)
 		txg = spa_vdev_enter(spa);
+
+	spa_trim_stop_wait(spa);
 
 	vd = spa_lookup_by_guid(spa, guid, B_FALSE);
 
@@ -6331,6 +6359,19 @@ spa_sync_props(void *arg, dmu_tx_t *tx)
 			case ZPOOL_PROP_FAILUREMODE:
 				spa->spa_failmode = intval;
 				break;
+			case ZPOOL_PROP_FORCETRIM:
+				spa->spa_force_trim = intval;
+				break;
+			case ZPOOL_PROP_AUTOTRIM:
+				if (intval != spa->spa_auto_trim) {
+					spa->spa_auto_trim = intval;
+					if (intval)
+						spa_auto_trim_taskq_create(spa);
+					else
+						spa_auto_trim_taskq_destroy(
+						    spa);
+				}
+				break;
 			case ZPOOL_PROP_AUTOEXPAND:
 				spa->spa_autoexpand = intval;
 				if (tx->tx_txg != TXG_INITIAL)
@@ -6408,6 +6449,27 @@ spa_sync_upgrades(spa_t *spa, dmu_tx_t *tx)
 			spa_feature_incr(spa, SPA_FEATURE_LZ4_COMPRESS, tx);
 	}
 	rrw_exit(&dp->dp_config_rwlock, FTAG);
+}
+
+/*
+ * Dispatches all auto-trim processing to all top-level vdevs. This is
+ * called from spa_sync once every txg.
+ */
+static void
+spa_auto_trim_dispatch(spa_t *spa, uint64_t txg)
+{
+	uint64_t i;
+
+	ASSERT(spa->spa_auto_trim_taskq != NULL);
+	for (i = 0; i < spa->spa_root_vdev->vdev_children; i++) {
+		vdev_auto_trim_info_t *vati = kmem_zalloc(sizeof (*vati),
+		    KM_SLEEP);
+		vati->vati_vdev = spa->spa_root_vdev->vdev_child[i];
+		vati->vati_txg = txg;
+		spa_config_enter(spa, SCL_TRIM_ALL, vati, RW_READER);
+		(void) taskq_dispatch(spa->spa_auto_trim_taskq,
+		    (void (*)(void *))vdev_auto_trim, vati, TQ_SLEEP);
+	}
 }
 
 /*
@@ -6517,6 +6579,9 @@ spa_sync(spa_t *spa, uint64_t txg)
 
 		ddt_sync(spa, txg);
 		dsl_scan_sync(dp, tx);
+
+		if (pass == 1 && spa->spa_auto_trim == SPA_AUTO_TRIM_ON)
+			spa_auto_trim_dispatch(spa, txg);
 
 		while ((vd = txg_list_remove(&spa->spa_vdev_txg_list, txg)))
 			vdev_sync(vd, txg);
@@ -6835,6 +6900,166 @@ void
 spa_event_notify(spa_t *spa, vdev_t *vd, const char *name)
 {
 	zfs_post_sysevent(spa, vd, name);
+}
+
+
+/*
+ * Initiates an on-demand TRIM of the whole pool. This kicks off individual
+ * TRIM tasks for each top-level vdev, which then pass over all of the free
+ * space in all of the vdev's metaslabs and issues TRIM commands for that
+ * space to the underlying vdevs.
+ */
+extern void
+spa_trim(spa_t *spa, uint64_t rate)
+{
+	uint64_t i;
+
+	if (rate != 0) {
+		spa->spa_trim_rate = MAX(rate, spa_min_trim_rate(spa));
+	} else {
+		spa->spa_trim_rate = 0;
+	}
+
+	spa_config_enter(spa, SCL_TRIM_ALL, FTAG, RW_WRITER);
+	mutex_enter(&spa->spa_trim_lock);
+
+	if (spa->spa_num_trimming) {
+		/*
+		 * TRIM is already ongoing. Wake up all sleeping vdev trim
+		 * threads because the trim rate might have changed above.
+		 */
+		cv_broadcast(&spa->spa_trim_update_cv);
+		mutex_exit(&spa->spa_trim_lock);
+		spa_config_exit(spa, SCL_TRIM_ALL, FTAG);
+		return;
+	}
+
+	spa_event_notify(spa, NULL, ESC_ZFS_TRIM_START);
+
+	spa->spa_trim_stop = B_FALSE;
+	for (i = 0; i < spa->spa_root_vdev->vdev_children; i++) {
+		vdev_t *vd = spa->spa_root_vdev->vdev_child[i];
+		vdev_trim_info_t *vti = kmem_zalloc(sizeof (*vti), KM_SLEEP);
+		vti->vti_spa = spa;
+		vti->vti_vdev = vd;
+		vti->vti_done = spa_vdev_trim_all_done;
+		vti->vti_done_arg = spa;
+		spa->spa_num_trimming++;
+
+		/* released in spa_vdev_trim_all_done */
+		spa_open_ref(spa, vti);
+
+		vd->vdev_trim_prog = 0;
+		VERIFY3U(taskq_dispatch(system_taskq,
+		    (void (*)(void *))vdev_trim_all, vti,
+		    TQ_SLEEP | TQ_NOQUEUE), !=, 0);
+	}
+	mutex_exit(&spa->spa_trim_lock);
+	spa_config_exit(spa, SCL_TRIM_ALL, FTAG);
+}
+
+/*
+ * Orders an on-demand TRIM operation to stop and returns immediately.
+ */
+extern void
+spa_trim_stop(spa_t *spa)
+{
+	mutex_enter(&spa->spa_trim_lock);
+	spa->spa_trim_stop = B_TRUE;
+	cv_broadcast(&spa->spa_trim_update_cv);
+	mutex_exit(&spa->spa_trim_lock);
+}
+
+/*
+ * Orders an on-demand TRIM operation to stop and waits for it to complete.
+ * You must hold the SCL_TRIM_ALL locks in order to guarantee that after
+ * returning from this function, no further on-demand TRIMs can be started
+ * if you are using spa_trim_stop_wait() to stop on-demand TRIMs in a
+ * critical code region.
+ */
+static void
+spa_trim_stop_wait(spa_t *spa)
+{
+	ASSERT3S(spa_config_held(spa, SCL_TRIM_ALL, RW_READER), ==,
+	    SCL_TRIM_ALL);
+	mutex_enter(&spa->spa_trim_lock);
+	spa->spa_trim_stop = B_TRUE;
+	cv_broadcast(&spa->spa_trim_update_cv);
+	while (spa->spa_num_trimming)
+		cv_wait(&spa->spa_trim_done_cv, &spa->spa_trim_lock);
+	mutex_exit(&spa->spa_trim_lock);
+}
+
+/*
+ * Returns on-demand TRIM progress. Progress is indicated in the number
+ * of bytes in total that on-demand TRIM has already passed (whether
+ * allocated or not). Completion of the operation is indicated when either
+ * the returned value is zero, or when the returned value is equal to the
+ * sum of the sizes of all top-level vdevs.
+ */
+extern uint64_t
+spa_get_trim_prog(spa_t *spa)
+{
+	uint64_t total = 0;
+	vdev_t *root_vd = spa->spa_root_vdev;
+	uint64_t i;
+
+	ASSERT(spa_config_held(spa, SCL_CONFIG, RW_READER));
+	mutex_enter(&spa->spa_trim_lock);
+	if (spa->spa_num_trimming > 0) {
+		for (i = 0; i < root_vd->vdev_children; i++) {
+			total += root_vd->vdev_child[i]->vdev_trim_prog;
+		}
+	}
+	mutex_exit(&spa->spa_trim_lock);
+
+	return (total);
+}
+
+/*
+ * Callback when a vdev_trim_all has finished on a single top-level vdev.
+ */
+static void
+spa_vdev_trim_all_done(vdev_trim_info_t *vti)
+{
+	spa_t *spa = vti->vti_done_arg;
+
+	mutex_enter(&spa->spa_trim_lock);
+	ASSERT(spa->spa_num_trimming != 0);
+	spa->spa_num_trimming--;
+	if (spa->spa_num_trimming == 0)
+		spa_event_notify(spa, NULL, ESC_ZFS_TRIM_FINISH);
+	spa_close(spa, vti);
+	cv_broadcast(&spa->spa_trim_done_cv);
+	mutex_exit(&spa->spa_trim_lock);
+}
+
+/*
+ * Determines the minimum sensible rate at which an on-demand TRIM can
+ * be performed on a given spa and returns it. Since we perform TRIM in
+ * metaslab-sized increments, we'll just let the longest step between
+ * metaslab TRIMs be 100s (random number, really). Thus, on a typical
+ * 200-metaslab vdev, the longest TRIM should take is about 5.5 hours.
+ * It *can* take longer if the device is really slow respond to
+ * zio_trim() commands or it contains more than 200 metaslabs, or
+ * metaslab sizes vary widely between top-level vdevs.
+ */
+static uint64_t
+spa_min_trim_rate(spa_t *spa)
+{
+	uint64_t i, smallest_ms_sz = UINT64_MAX;
+
+	/* find the smallest metaslab */
+	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
+	for (i = 0; i < spa->spa_root_vdev->vdev_children; i++) {
+		smallest_ms_sz = MIN(smallest_ms_sz,
+		    spa->spa_root_vdev->vdev_child[i]->vdev_ms[0]->ms_size);
+	}
+	spa_config_exit(spa, SCL_CONFIG, FTAG);
+	VERIFY(smallest_ms_sz != 0);
+
+	/* minimum TRIM rate is 1/100th of the smallest metaslab size */
+	return (smallest_ms_sz / 100);
 }
 
 #if defined(_KERNEL) && defined(HAVE_SPL)

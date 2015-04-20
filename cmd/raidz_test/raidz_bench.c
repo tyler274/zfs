@@ -83,8 +83,9 @@ run_gen_bench_impl(const char *impl)
 			/* create suitable raidz_map */
 			ncols = rto_opts.rto_dcols + fn + 1;
 			zio_bench.io_size = 1ULL << ds;
-			rm_bench = vdev_raidz_map_alloc(&zio_bench,
-			    BENCH_ASHIFT, ncols, fn+1);
+			rm_bench = vdev_raidz_map_alloc(zio_bench.io_data,
+			    zio_bench.io_size, zio_bench.io_offset,
+			    BENCH_ASHIFT, ncols, fn+1, B_TRUE);
 
 			/* estimate iteration count */
 			iter_cnt = GEN_BENCH_MEMORY;
@@ -163,8 +164,9 @@ run_rec_bench_impl(const char *impl)
 			    (1ULL << BENCH_ASHIFT))
 				continue;
 
-			rm_bench = vdev_raidz_map_alloc(&zio_bench,
-				BENCH_ASHIFT, ncols, PARITY_PQR);
+			rm_bench = vdev_raidz_map_alloc(zio_bench.io_data,
+			    zio_bench.io_size, zio_bench.io_offset,
+			    BENCH_ASHIFT, ncols, PARITY_PQR, B_TRUE);
 
 			/* estimate iteration count */
 			iter_cnt = (REC_BENCH_MEMORY);
