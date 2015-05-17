@@ -90,6 +90,15 @@ extern inline void dmu_buf_init_user(dmu_buf_user_t *dbu,
 static kmem_cache_t *dbuf_cache;
 static taskq_t *dbu_evict_taskq;
 
+/*
+ * Size of the dbuf hash table relative to the size of the dbuf mutex hash
+ * table expressed as a power of 2.  The parameter specifies how much smaller
+ * the dbuf mutex hash table is than the dbuf hash table.
+ *
+ * The default value of 10 causes each hash entry to cover 1024 dbuf entries.
+ */
+int zfs_dbuf_mutex_size_scale = 10;
+
 /* ARGSUSED */
 static int
 dbuf_cons(void *vdb, void *unused, int kmflag)
@@ -370,7 +379,10 @@ dbuf_evict(dmu_buf_impl_t *db)
 void
 dbuf_init(void)
 {
-	uint64_t hsize = 1ULL << 16;
+	int hshift = 16;
+	uint64_t hsize = 1ULL << hshift;
+	int mshift;
+	uint64_t msize;
 	dbuf_hash_table_t *h = &dbuf_hash_table;
 	int i;
 
@@ -379,11 +391,12 @@ dbuf_init(void)
 	 * with an average 4K block size.  The table will take up
 	 * totalmem*sizeof(void*)/4K (i.e. 2MB/GB with 8-byte pointers).
 	 */
-	while (hsize * 4096 < physmem * PAGESIZE)
+	while (hsize * 4096 < physmem * PAGESIZE) {
 		hsize <<= 1;
+		++hshift;
+	}
 
 retry:
-	h->hash_table_mask = hsize - 1;
 #if defined(_KERNEL) && defined(HAVE_SPL)
 	/*
 	 * Large allocations which do not require contiguous pages
@@ -394,17 +407,36 @@ retry:
 	h->hash_table = kmem_zalloc(hsize * sizeof (void *), KM_NOSLEEP);
 #endif
 	if (h->hash_table == NULL) {
+retry2:
 		/* XXX - we should really return an error instead of assert */
 		ASSERT(hsize > (1ULL << 10));
 		hsize >>= 1;
+		--hshift;
 		goto retry;
 	}
+	h->hash_table_mask = hsize - 1;
+
+	/*
+	 * Allocate the mutex hash table, giving it at least 256 entries.
+	 */
+	mshift = hshift - zfs_dbuf_mutex_size_scale;
+	if (mshift < 0)
+		mshift = 8;
+	msize = 1ULL << mshift;
+#if defined(_KERNEL) && defined(HAVE_SPL)
+	h->hash_mutexes = vmem_zalloc(msize * sizeof (kmutex_t), KM_SLEEP);
+#else
+	h->hash_mutexes = kmem_zalloc(msize * sizeof (kmutex_t), KM_NOSLEEP);
+#endif
+	if (h->hash_mutexes == NULL)
+		goto retry2;
+	h->hash_mutexes_mask = msize - 1;
 
 	dbuf_cache = kmem_cache_create("dmu_buf_impl_t",
 	    sizeof (dmu_buf_impl_t),
 	    0, dbuf_cons, dbuf_dest, NULL, NULL, NULL, 0);
 
-	for (i = 0; i < DBUF_MUTEXES; i++)
+	for (i = 0; i < msize; i++)
 		mutex_init(&h->hash_mutexes[i], NULL, MUTEX_DEFAULT, NULL);
 
 	dbuf_stats_init(h);
@@ -420,11 +452,12 @@ void
 dbuf_fini(void)
 {
 	dbuf_hash_table_t *h = &dbuf_hash_table;
+	int dbuf_mutexes = h->hash_mutexes_mask + 1;
 	int i;
 
 	dbuf_stats_destroy();
 
-	for (i = 0; i < DBUF_MUTEXES; i++)
+	for (i = 0; i < dbuf_mutexes; i++)
 		mutex_destroy(&h->hash_mutexes[i]);
 #if defined(_KERNEL) && defined(HAVE_SPL)
 	/*
@@ -432,8 +465,10 @@ dbuf_fini(void)
 	 * should be using vmem_free() in the linux kernel
 	 */
 	vmem_free(h->hash_table, (h->hash_table_mask + 1) * sizeof (void *));
+	vmem_free(h->hash_mutexes, dbuf_mutexes * sizeof (kmutex_t));
 #else
 	kmem_free(h->hash_table, (h->hash_table_mask + 1) * sizeof (void *));
+	kmem_free(h->hash_mutexes, dbuf_mutexes * sizeof (kmutex_t));
 #endif
 	kmem_cache_destroy(dbuf_cache);
 	taskq_destroy(dbu_evict_taskq);
@@ -3161,4 +3196,8 @@ EXPORT_SYMBOL(dmu_buf_set_user_ie);
 EXPORT_SYMBOL(dmu_buf_get_user);
 EXPORT_SYMBOL(dmu_buf_freeable);
 EXPORT_SYMBOL(dmu_buf_get_blkptr);
+
+module_param(zfs_dbuf_mutex_size_scale, int, 0644);
+MODULE_PARM_DESC(zfs_dbuf_mutex_size_scale,
+	"Size of dbuf hash table relative to dbuf mutex hash table");
 #endif
