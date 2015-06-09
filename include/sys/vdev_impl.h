@@ -215,6 +215,8 @@ struct vdev {
 	zio_t		*vdev_probe_zio; /* root of current probe	*/
 	vdev_aux_t	vdev_label_aux;	/* on-disk aux state		*/
 
+	uint64_t	vdev_trim_prog;	/* trim progress in bytes	*/
+
 	/*
 	 * For DTrace to work in userland (libzpool) context, these fields must
 	 * remain at the end of the structure.  DTrace will use the kernel's

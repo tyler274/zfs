@@ -97,10 +97,9 @@ static inline void __zio_execute(zio_t *zio);
 /*
  * Tunable to allow for debugging SCSI UNMAP/SATA TRIM calls. Disabling
  * it will prevent ZFS from attempting to issue DKIOCFREE ioctls to the
- * underlying storage. Synchronous write performance may degrade over
- * time with zfs_trim set to B_FALSE.
+ * underlying storage.
  */
-int zfs_trim = B_FALSE;	/* TODO: set to B_TRUE for shipping code */
+int zfs_trim = B_TRUE;
 int zfs_trim_min_ext_sz = 1 << 20;	/* 1 MB */
 
 void
@@ -811,8 +810,7 @@ zio_ioctl_with_pipeline(zio_t *pio, spa_t *spa, vdev_t *vd, int cmd,
 		 * Otherwise the default behavior applies, which simply fans
 		 * out the ioctl to all component vdevs.
 		 */
-		if (cmd == DKIOCFREE &&
-		    vd->vdev_ops->vdev_op_trim != NULL) {
+		if (cmd == DKIOCFREE && vd->vdev_ops->vdev_op_trim != NULL) {
 			vd->vdev_ops->vdev_op_trim(vd, zio, private);
 		} else {
 			for (c = 0; c < vd->vdev_children; c++)
@@ -882,20 +880,8 @@ zio_trim(spa_t *spa, vdev_t *vd, struct range_tree *tree,
 
 	ASSERT(range_tree_space(tree) != 0);
 
-	/* Determine feature configuration and device support */
 	if (!zfs_trim)
 		return (sub_pio);
-
-	switch (spa_get_force_trim(spa)) {
-	case SPA_FORCE_TRIM_AUTO:
-		if (vd->vdev_notrim)
-			return (sub_pio);
-		break;
-	case SPA_FORCE_TRIM_ON:
-		break;
-	case SPA_FORCE_TRIM_OFF:
-		return (sub_pio);
-	}
 
 	num_exts = avl_numnodes(&tree->rt_root);
 	dfl = vmem_zalloc(DFL_SZ(num_exts), KM_SLEEP);

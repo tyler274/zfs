@@ -45,6 +45,13 @@ typedef enum vdev_dtl_type {
 	DTL_TYPES
 } vdev_dtl_type_t;
 
+typedef struct vdev_trim_info {
+	spa_t *vti_spa;
+	vdev_t *vti_vdev;
+	void (*vti_done)(struct vdev_trim_info *);
+	void *vti_done_arg;
+} vdev_trim_info_t;
+
 extern int zfs_nocacheflush;
 
 extern int vdev_open(vdev_t *);
@@ -135,6 +142,8 @@ typedef enum vdev_config_flag {
 extern void vdev_top_config_generate(spa_t *spa, nvlist_t *config);
 extern nvlist_t *vdev_config_generate(spa_t *spa, vdev_t *vd,
     boolean_t getstats, vdev_config_flag_t flags);
+
+void vdev_trim_all(vdev_trim_info_t *vti);
 
 /*
  * Label routines
