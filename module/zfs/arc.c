@@ -4957,8 +4957,8 @@ l2arc_write_buffers(spa_t *spa, l2arc_dev_t *dev, uint64_t target_sz,
 {
 	arc_buf_hdr_t *ab, *ab_prev, *head;
 	list_t *list;
-	uint64_t write_asize, write_psize, write_sz, headroom,
-	    buf_compress_minsz;
+	uint64_t write_asize, write_sz, headroom, buf_compress_minsz,
+	    stats_size;
 	void *buf_data;
 	kmutex_t *list_lock = NULL;
 	boolean_t full;
@@ -4974,7 +4974,7 @@ l2arc_write_buffers(spa_t *spa, l2arc_dev_t *dev, uint64_t target_sz,
 	*headroom_boost = B_FALSE;
 
 	pio = NULL;
-	write_sz = write_asize = write_psize = 0;
+	write_sz = write_asize = 0;
 	full = B_FALSE;
 	head = kmem_cache_alloc(hdr_cache, KM_PUSHPAGE);
 	head->b_flags |= ARC_L2_WRITE_HEAD;
@@ -5013,6 +5013,7 @@ l2arc_write_buffers(spa_t *spa, l2arc_dev_t *dev, uint64_t target_sz,
 			l2arc_buf_hdr_t *l2hdr;
 			kmutex_t *hash_lock;
 			uint64_t buf_sz;
+			uint64_t buf_a_sz;
 
 			if (arc_warm == B_FALSE)
 				ab_prev = list_next(list, ab);
@@ -5041,7 +5042,15 @@ l2arc_write_buffers(spa_t *spa, l2arc_dev_t *dev, uint64_t target_sz,
 				continue;
 			}
 
-			if ((write_sz + ab->b_size) > target_sz) {
+			/*
+			 * Assume that the buffer is not going to be compressed
+			 * and could take more space on disk because of a larger
+			 * disk block size.
+			 */
+			buf_sz = ab->b_size;
+			buf_a_sz = vdev_psize_to_asize(dev->l2ad_vdev, buf_sz);
+
+			if ((write_asize + buf_a_sz) > target_sz) {
 				full = B_TRUE;
 				mutex_exit(hash_lock);
 				break;
@@ -5085,8 +5094,6 @@ l2arc_write_buffers(spa_t *spa, l2arc_dev_t *dev, uint64_t target_sz,
 			l2hdr->b_asize = ab->b_size;
 			l2hdr->b_tmp_cdata = ab->b_buf->b_data;
 			l2hdr->b_hits = 0;
-
-			buf_sz = ab->b_size;
 			ab->b_l2hdr = l2hdr;
 
 			list_insert_head(dev->l2ad_buflist, ab);
@@ -5100,7 +5107,7 @@ l2arc_write_buffers(spa_t *spa, l2arc_dev_t *dev, uint64_t target_sz,
 
 			mutex_exit(hash_lock);
 
-			write_sz += buf_sz;
+			write_sz += buf_a_sz;
 		}
 
 		mutex_exit(list_lock);
@@ -5116,6 +5123,19 @@ l2arc_write_buffers(spa_t *spa, l2arc_dev_t *dev, uint64_t target_sz,
 		kmem_cache_free(hdr_cache, head);
 		return (0);
 	}
+
+ 	/*
+	 * Note that elsewhere in this file arcstat_l2_asize
+	 * and the used space on l2ad_vdev are updated using b_asize,
+	 * which is not necessarily rounded up to the device block size.
+	 * Too keep accounting consistent we do the same here as well:
+	 * stats_size accumulates the sum of b_asize of the written buffers,
+	 * while write_asize accumulates the sum of b_asize rounded up
+	 * to the device block size.
+	 * The latter sum is used only to validate the corectness of the code.
+	 */
+	stats_size = 0;
+	write_asize = 0;
 
 	/*
 	 * Now start writing the buffers. We're starting at the write head
@@ -5164,7 +5184,7 @@ l2arc_write_buffers(spa_t *spa, l2arc_dev_t *dev, uint64_t target_sz,
 
 		/* Compression may have squashed the buffer to zero length. */
 		if (buf_sz != 0) {
-			uint64_t buf_p_sz;
+			uint64_t buf_a_sz;
 
 			wzio = zio_write_phys(pio, dev->l2ad_vdev,
 			    dev->l2ad_hand, buf_sz, buf_data, ZIO_CHECKSUM_OFF,
@@ -5175,13 +5195,14 @@ l2arc_write_buffers(spa_t *spa, l2arc_dev_t *dev, uint64_t target_sz,
 			    zio_t *, wzio);
 			(void) zio_nowait(wzio);
 
-			write_asize += buf_sz;
+			stats_size += buf_sz;
+
 			/*
 			 * Keep the clock hand suitably device-aligned.
 			 */
-			buf_p_sz = vdev_psize_to_asize(dev->l2ad_vdev, buf_sz);
-			write_psize += buf_p_sz;
-			dev->l2ad_hand += buf_p_sz;
+			buf_a_sz = vdev_psize_to_asize(dev->l2ad_vdev, buf_sz);
+			write_asize += buf_a_sz;
+			dev->l2ad_hand += buf_a_sz;
 		}
 	}
 
@@ -5191,8 +5212,8 @@ l2arc_write_buffers(spa_t *spa, l2arc_dev_t *dev, uint64_t target_sz,
 	ARCSTAT_BUMP(arcstat_l2_writes_sent);
 	ARCSTAT_INCR(arcstat_l2_write_bytes, write_asize);
 	ARCSTAT_INCR(arcstat_l2_size, write_sz);
-	ARCSTAT_INCR(arcstat_l2_asize, write_asize);
-	vdev_space_update(dev->l2ad_vdev, write_asize, 0, 0);
+	ARCSTAT_INCR(arcstat_l2_asize, stats_size);
+	vdev_space_update(dev->l2ad_vdev, stats_size, 0, 0);
 
 	/*
 	 * Bump device hand to the device start if it is approaching the end.
