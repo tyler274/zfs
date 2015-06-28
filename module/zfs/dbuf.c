@@ -90,6 +90,27 @@ extern inline void dmu_buf_init_user(dmu_buf_user_t *dbu,
 static kmem_cache_t *dbuf_cache;
 static taskq_t *dbu_evict_taskq;
 
+/* 
+ * Dbuf stats
+ */
+kstat_t *dbuf_ksp;
+
+typedef struct dbuf_stats {
+	kstat_named_t dbufstat_stat1;
+} dbuf_stats_t;
+
+static dbuf_stats_t dbuf_stats = {
+	{ "stat1",			KSTAT_DATA_UINT64 },
+};
+
+#define	DBUFSTAT(stat)	(dbuf_stats.stat.value.ui64)
+
+#define	DBUFSTAT_INCR(stat, val) \
+	atomic_add_64(&dbuf_stats.stat.value.ui64, (val))
+
+#define	DBUFSTAT_BUMP(stat)	DBUFSTAT_INCR(stat, 1)
+#define	DBUFSTAT_BUMPDOWN(stat)	DBUFSTAT_INCR(stat, -1)
+
 /* ARGSUSED */
 static int
 dbuf_cons(void *vdb, void *unused, int kmflag)
@@ -367,6 +388,14 @@ dbuf_evict(dmu_buf_impl_t *db)
 	dbuf_destroy(db);
 }
 
+static int
+dbuf_kstat_update(kstat_t *ksp, int rw)
+{
+	if (rw == KSTAT_WRITE)
+		return (SET_ERROR(EACCES));
+	return (0);
+}
+
 void
 dbuf_init(void)
 {
@@ -408,6 +437,15 @@ retry:
 		mutex_init(&h->hash_mutexes[i], NULL, MUTEX_DEFAULT, NULL);
 
 	dbuf_stats_init(h);
+
+	dbuf_ksp = kstat_create("zfs", 0, "dbufstats", "misc", KSTAT_TYPE_NAMED,
+	    sizeof (dbuf_stats) / sizeof (kstat_named_t), KSTAT_FLAG_VIRTUAL);
+
+	if (dbuf_ksp != NULL) {
+		dbuf_ksp->ks_data = &dbuf_stats;
+		dbuf_ksp->ks_update = dbuf_kstat_update;
+		kstat_install(dbuf_ksp);
+	}
 
 	/*
 	 * All entries are queued via taskq_dispatch_ent(), so min/maxalloc
