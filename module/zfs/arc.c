@@ -3141,22 +3141,32 @@ arc_adapt_thread(void)
 
 		arc_evicted = arc_adjust();
 
-		/*
-		 * We're either no longer overflowing, or we
-		 * can't evict anything more, so we should wake
-		 * up any threads before we go to sleep.
-		 */
-		if (arc_size <= arc_c || arc_evicted == 0)
-			cv_broadcast(&arc_reclaim_waiters_cv);
-
 		mutex_enter(&arc_reclaim_lock);
 
-		/* block until needed, or one second, whichever is shorter */
-		CALLB_CPR_SAFE_BEGIN(&cpr);
-		(void) cv_timedwait_sig(&arc_reclaim_thread_cv,
-		    &arc_reclaim_lock, (ddi_get_lbolt() + hz));
-		CALLB_CPR_SAFE_END(&cpr, &arc_reclaim_lock);
 
+		/*
+		 * If evicted is zero, we couldn't evict anything via
+		 * arc_adjust(). This could be due to hash lock
+		 * collisions, but more likely due to the majority of
+		 * arc buffers being unevictable. Therefore, even if
+		 * arc_size is above arc_c, another pass is unlikely to
+		 * be helpful and could potentially cause us to enter an
+		 * infinite loop.
+		 */
+		if (arc_size <= arc_c || arc_evicted == 0) {
+			/*
+			 * We're either no longer overflowing, or we
+			 * can't evict anything more, so we should wake
+			 * up any threads before we go to sleep.
+			 */
+			cv_broadcast(&arc_reclaim_waiters_cv);
+
+			/* block until needed, or one second, whichever is shorter */
+			CALLB_CPR_SAFE_BEGIN(&cpr);
+			(void) cv_timedwait_sig(&arc_reclaim_thread_cv,
+			    &arc_reclaim_lock, (ddi_get_lbolt() + hz));
+			CALLB_CPR_SAFE_END(&cpr, &arc_reclaim_lock);
+		}
 
 		/* Allow the module options to be changed */
 		if (zfs_arc_max > 64 << 20 &&
