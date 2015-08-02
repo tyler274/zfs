@@ -33,6 +33,8 @@
  *
  * Volumes are persistent through reboot and module load.  No user command
  * needs to be run before opening and using a device.
+ *
+ * Copyright 2014 Nexenta Systems, Inc.  All rights reserved.
  */
 
 #include <sys/dbuf.h>
@@ -41,6 +43,7 @@
 #include <sys/dsl_prop.h>
 #include <sys/zap.h>
 #include <sys/zil_impl.h>
+#include <sys/dmu_tx.h>
 #include <sys/zio.h>
 #include <sys/zfs_rlock.h>
 #include <sys/zfs_znode.h>
@@ -435,6 +438,24 @@ out:
 }
 
 /*
+ * Replay a TX_TRUNCATE ZIL transaction if asked.  TX_TRUNCATE is how we
+ * implement DKIOCFREE/free-long-range.
+ */
+static int
+zvol_replay_truncate(zvol_state_t *zv, lr_truncate_t *lr, boolean_t byteswap)
+{
+	uint64_t offset, length;
+
+	if (byteswap)
+		byteswap_uint64_array(lr, sizeof (*lr));
+
+	offset = lr->lr_offset;
+	length = lr->lr_length;
+
+	return (dmu_free_long_range(zv->zv_objset, ZVOL_OBJ, offset, length));
+}
+
+/*
  * Replay a TX_WRITE ZIL transaction that didn't get committed
  * after a system failure
  */
@@ -472,7 +493,7 @@ zvol_replay_err(zvol_state_t *zv, lr_t *lr, boolean_t byteswap)
 
 /*
  * Callback vectors for replaying records.
- * Only TX_WRITE is needed for zvol.
+ * Only TX_WRITE and TX_TRUNCATE are needed for zvol.
  */
 zil_replay_func_t zvol_replay_vector[TX_MAX_TYPE] = {
 	(zil_replay_func_t)zvol_replay_err,	/* no such transaction type */
@@ -485,7 +506,7 @@ zil_replay_func_t zvol_replay_vector[TX_MAX_TYPE] = {
 	(zil_replay_func_t)zvol_replay_err,	/* TX_LINK */
 	(zil_replay_func_t)zvol_replay_err,	/* TX_RENAME */
 	(zil_replay_func_t)zvol_replay_write,	/* TX_WRITE */
-	(zil_replay_func_t)zvol_replay_err,	/* TX_TRUNCATE */
+	(zil_replay_func_t)zvol_replay_truncate, /* TX_TRUNCATE */
 	(zil_replay_func_t)zvol_replay_err,	/* TX_SETATTR */
 	(zil_replay_func_t)zvol_replay_err,	/* TX_ACL */
 };
@@ -626,6 +647,30 @@ out:
 	spl_fstrans_unmark(cookie);
 }
 
+/*
+ * Log a DKIOCFREE/free-long-range to the ZIL with TX_TRUNCATE.
+ */
+static void
+zvol_log_truncate(zvol_state_t *zv, dmu_tx_t *tx, uint64_t off, uint64_t len,
+    boolean_t sync)
+{
+	itx_t *itx;
+	lr_truncate_t *lr;
+	zilog_t *zilog = zv->zv_zilog;
+
+	if (zil_replaying(zilog, tx))
+		return;
+
+	itx = zil_itx_create(TX_TRUNCATE, sizeof (*lr));
+	lr = (lr_truncate_t *)&itx->itx_lr;
+	lr->lr_foid = ZVOL_OBJ;
+	lr->lr_offset = off;
+	lr->lr_length = len;
+
+	itx->itx_sync = sync;
+	zil_itx_assign(zilog, itx, tx);
+}
+
 #ifdef HAVE_BLK_QUEUE_DISCARD
 static void
 zvol_discard(void *arg)
@@ -638,6 +683,7 @@ zvol_discard(void *arg)
 	uint64_t end = start + blk_rq_bytes(req);
 	int error;
 	rl_t *rl;
+	dmu_tx_t *tx;
 
 	if (end > zv->zv_volsize) {
 		error = EIO;
@@ -659,12 +705,16 @@ zvol_discard(void *arg)
 	}
 
 	rl = zfs_range_lock(&zv->zv_znode, start, end - start, RL_WRITER);
-
-	error = dmu_free_long_range(zv->zv_objset, ZVOL_OBJ, start, end-start);
-
-	/*
-	 * TODO: maybe we should add the operation to the log.
-	 */
+	tx = dmu_tx_create(zv->zv_objset);
+	error = dmu_tx_assign(tx, TXG_WAIT);
+	if (error != 0) {
+		dmu_tx_abort(tx);
+	} else {
+		zvol_log_truncate(zv, tx, start, end - start, B_TRUE);
+		dmu_tx_commit(tx);
+		error = dmu_free_long_range(zv->zv_objset,
+		    ZVOL_OBJ, start, end-start);
+	}
 
 	zfs_range_unlock(rl);
 out:
