@@ -4393,7 +4393,7 @@ zfs_space(struct inode *ip, int cmd, flock64_t *bfp, int flag,
 	 * On Linux we can get here through truncate_range() which
 	 * operates directly on inodes, so we need to check access rights.
 	 */
-	if ((error = zfs_zaccess(zp, ACE_WRITE_DATA, 0, B_FALSE, cr))) {
+	if (cr && (error = zfs_zaccess(zp, ACE_WRITE_DATA, 0, B_FALSE, cr))) {
 		ZFS_EXIT(zsb);
 		return (error);
 	}
