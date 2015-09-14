@@ -168,6 +168,7 @@ typedef enum {
 	ZFS_PROP_OVERLAY,
 	ZFS_PROP_PREV_SNAP,
 	ZFS_PROP_RECEIVE_RESUME_TOKEN,
+	ZFS_PROP_INHERITID,
 	ZFS_NUM_PROPS
 } zfs_prop_t;
 
@@ -392,6 +393,13 @@ typedef enum {
 	ZFS_REDUNDANT_METADATA_ALL,
 	ZFS_REDUNDANT_METADATA_MOST
 } zfs_redundant_metadata_type_t;
+
+typedef enum {
+	ZFS_INHERITID_OFF,
+	ZFS_INHERITID_UID,
+	ZFS_INHERITID_GID,
+	ZFS_INHERITID_ALL
+} zfs_inheritid_type_t;
 
 /*
  * On-disk version number.
