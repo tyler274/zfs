@@ -4244,6 +4244,54 @@ zfs_userspace(zfs_handle_t *zhp, zfs_userquota_prop_t type,
 	return (0);
 }
 
+/*
+ * Upgrade user and group accounting
+ */
+int
+zfs_userspace_upgrade(zfs_handle_t *zhp)
+{
+	libzfs_handle_t *hdl = zhp->zfs_hdl;
+	zfs_cmd_t zc = {"\0"};
+	int ret;
+	char errbuf[1024];
+
+	(void) snprintf(errbuf, sizeof (errbuf), dgettext(TEXT_DOMAIN,
+	    "cannot upgrade '%s'"), zhp->zfs_name);
+
+
+	(void) strlcpy(zc.zc_name, zhp->zfs_name, sizeof (zc.zc_name));
+	ret = zfs_ioctl(hdl, ZFS_IOC_USERSPACE_UPGRADE, &zc);
+
+	if (ret != 0)
+		(void) zfs_standard_error(hdl, ret, errbuf);
+
+	return (ret);
+}
+
+/*
+ * Rebuild user and group accounting
+ */
+int
+zfs_userspace_rebuild(zfs_handle_t *zhp)
+{
+	libzfs_handle_t *hdl = zhp->zfs_hdl;
+	zfs_cmd_t zc = {"\0"};
+	int ret;
+	char errbuf[1024];
+
+	(void) snprintf(errbuf, sizeof (errbuf), dgettext(TEXT_DOMAIN,
+	    "cannot upgrade '%s'"), zhp->zfs_name);
+
+
+	(void) strlcpy(zc.zc_name, zhp->zfs_name, sizeof (zc.zc_name));
+	ret = zfs_ioctl(hdl, ZFS_IOC_USERSPACE_REBUILD, &zc);
+
+	if (ret != 0)
+		(void) zfs_standard_error(hdl, ret, errbuf);
+
+	return (ret);
+}
+
 struct holdarg {
 	nvlist_t *nvl;
 	const char *snapname;

@@ -1192,6 +1192,15 @@ zfs_secpolicy_userspace_upgrade(zfs_cmd_t *zc, nvlist_t *innvl, cred_t *cr)
 
 /* ARGSUSED */
 static int
+zfs_secpolicy_userspace_rebuild(zfs_cmd_t *zc, nvlist_t *innvl, cred_t *cr)
+{
+	return (zfs_secpolicy_setprop(zc->zc_name, ZFS_PROP_VERSION,
+	    NULL, cr));
+}
+
+
+/* ARGSUSED */
+static int
 zfs_secpolicy_hold(zfs_cmd_t *zc, nvlist_t *innvl, cred_t *cr)
 {
 	nvpair_t *pair;
@@ -4631,6 +4640,50 @@ zfs_ioc_userspace_upgrade(zfs_cmd_t *zc)
 	return (error);
 }
 
+/*
+ * inputs:
+ * zc_name		name of filesystem
+ *
+ * outputs:
+ * none
+ */
+static int
+zfs_ioc_userspace_rebuild(zfs_cmd_t *zc)
+{
+	objset_t *os;
+	int error = 0;
+	zfs_sb_t *zsb;
+
+	if (get_zfs_sb(zc->zc_name, &zsb) == 0) {
+		if (!dmu_objset_userused_enabled(zsb->z_os)) {
+			/*
+			 * If userused is not enabled, it may be because the
+			 * objset needs to be closed & reopened (to grow the
+			 * objset_phys_t).  Suspend/resume the fs will do that.
+			 */
+			error = zfs_suspend_fs(zsb);
+			if (error == 0) {
+				dmu_objset_refresh_ownership(zsb->z_os,
+				    zsb);
+				error = zfs_resume_fs(zsb, zc->zc_name);
+			}
+		}
+		if (error == 0)
+			error = dmu_objset_userspace_rebuild(zsb->z_os);
+		deactivate_super(zsb->z_sb);
+	} else {
+		/* XXX kind of reading contents without owning */
+		error = dmu_objset_hold(zc->zc_name, FTAG, &os);
+		if (error != 0)
+			return (error);
+
+		error = dmu_objset_userspace_rebuild(os);
+		dmu_objset_rele(os, FTAG);
+	}
+
+	return (error);
+}
+
 static int
 zfs_ioc_share(zfs_cmd_t *zc)
 {
@@ -5559,6 +5612,9 @@ zfs_ioctl_init(void)
 	    zfs_secpolicy_smb_acl, POOL_CHECK_NONE);
 	zfs_ioctl_register_dataset_nolog(ZFS_IOC_USERSPACE_UPGRADE,
 	    zfs_ioc_userspace_upgrade, zfs_secpolicy_userspace_upgrade,
+	    POOL_CHECK_SUSPENDED | POOL_CHECK_READONLY);
+	zfs_ioctl_register_dataset_nolog(ZFS_IOC_USERSPACE_REBUILD,
+	    zfs_ioc_userspace_rebuild, zfs_secpolicy_userspace_rebuild,
 	    POOL_CHECK_SUSPENDED | POOL_CHECK_READONLY);
 	zfs_ioctl_register_dataset_nolog(ZFS_IOC_TMP_SNAPSHOT,
 	    zfs_ioc_tmp_snapshot, zfs_secpolicy_tmp_snapshot,

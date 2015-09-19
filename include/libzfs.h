@@ -645,6 +645,9 @@ typedef int (*zfs_userspace_cb_t)(void *arg, const char *domain,
 extern int zfs_userspace(zfs_handle_t *, zfs_userquota_prop_t,
     zfs_userspace_cb_t, void *);
 
+extern int zfs_userspace_upgrade(zfs_handle_t *);
+extern int zfs_userspace_rebuild(zfs_handle_t *);
+
 extern int zfs_get_fsacl(zfs_handle_t *, nvlist_t **);
 extern int zfs_set_fsacl(zfs_handle_t *, boolean_t, nvlist_t *);
 

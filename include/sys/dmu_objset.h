@@ -171,6 +171,7 @@ void dmu_objset_do_userquota_updates(objset_t *os, dmu_tx_t *tx);
 void dmu_objset_userquota_get_ids(dnode_t *dn, boolean_t before, dmu_tx_t *tx);
 boolean_t dmu_objset_userused_enabled(objset_t *os);
 int dmu_objset_userspace_upgrade(objset_t *os);
+int dmu_objset_userspace_rebuild(objset_t *os);
 boolean_t dmu_objset_userspace_present(objset_t *os);
 int dmu_fsname(const char *snapname, char *buf);
 

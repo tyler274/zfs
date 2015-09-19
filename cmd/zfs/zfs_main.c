@@ -95,6 +95,8 @@ static int zfs_do_send(int argc, char **argv);
 static int zfs_do_receive(int argc, char **argv);
 static int zfs_do_promote(int argc, char **argv);
 static int zfs_do_userspace(int argc, char **argv);
+static int zfs_do_userspace_upgrade(int argc, char **argv);
+static int zfs_do_userspace_rebuild(int argc, char **argv);
 static int zfs_do_allow(int argc, char **argv);
 static int zfs_do_unallow(int argc, char **argv);
 static int zfs_do_hold(int argc, char **argv);
@@ -149,6 +151,8 @@ typedef enum {
 	HELP_RELEASE,
 	HELP_DIFF,
 	HELP_BOOKMARK,
+	HELP_USERSPACE_UPGRADE,
+	HELP_USERSPACE_REBUILD,
 } zfs_help_t;
 
 typedef struct zfs_command {
@@ -185,6 +189,10 @@ static zfs_command_t command_table[] = {
 	{ "upgrade",	zfs_do_upgrade,		HELP_UPGRADE		},
 	{ "userspace",	zfs_do_userspace,	HELP_USERSPACE		},
 	{ "groupspace",	zfs_do_userspace,	HELP_GROUPSPACE		},
+	{ "userspace_upgrade", zfs_do_userspace_upgrade,
+	    HELP_USERSPACE_UPGRADE },
+	{ "userspace_rebuild", zfs_do_userspace_rebuild,
+	    HELP_USERSPACE_REBUILD },
 	{ NULL },
 	{ "mount",	zfs_do_mount,		HELP_MOUNT		},
 	{ "unmount",	zfs_do_unmount,		HELP_UNMOUNT		},
@@ -306,6 +314,10 @@ get_usage(zfs_help_t idx)
 		    "[-s field] ...\n"
 		    "\t    [-S field] ... [-t type[,...]] "
 		    "<filesystem|snapshot>\n"));
+	case HELP_USERSPACE_UPGRADE:
+		return (gettext("\tuserspace_upgrade <filesystem>\n"));
+	case HELP_USERSPACE_REBUILD:
+		return (gettext("\tuserspace_rebuild <filesystem>\n"));
 	case HELP_HOLD:
 		return (gettext("\thold [-r] <tag> <snapshot> ...\n"));
 	case HELP_HOLDS:
@@ -6652,6 +6664,42 @@ zfs_do_bookmark(int argc, char **argv)
 usage:
 	usage(B_FALSE);
 	return (-1);
+}
+
+static int
+zfs_do_userspace_upgrade(int argc, char **argv)
+{
+	int ret = 0;
+	zfs_handle_t *zhp;
+
+	if (argc != 2) {
+		(void) fprintf(stderr, gettext("missing dataset "
+		    "name\n"));
+		usage(B_FALSE);
+	}
+
+	if ((zhp = zfs_open(g_zfs, argv[1], ZFS_TYPE_FILESYSTEM)) == NULL)
+		return (1);
+	ret = zfs_userspace_upgrade(zhp);
+	return (ret);
+}
+
+static int
+zfs_do_userspace_rebuild(int argc, char **argv)
+{
+	int ret = 0;
+	zfs_handle_t *zhp;
+
+	if (argc != 2) {
+		(void) fprintf(stderr, gettext("missing dataset "
+		    "name\n"));
+		usage(B_FALSE);
+	}
+
+	if ((zhp = zfs_open(g_zfs, argv[1], ZFS_TYPE_FILESYSTEM)) == NULL)
+		return (1);
+	ret = zfs_userspace_rebuild(zhp);
+	return (ret);
 }
 
 int

@@ -66,6 +66,9 @@ krwlock_t os_lock;
  */
 int dmu_find_threads = 0;
 
+/* How to manage user/group used values */
+static int zfs_dmu_userused_action;
+
 static void dmu_objset_find_dp_cb(void *arg);
 
 void
@@ -1216,12 +1219,21 @@ do_userquota_update(objset_t *os, uint64_t used, uint64_t flags,
 {
 	if ((flags & DNODE_FLAG_USERUSED_ACCOUNTED)) {
 		int64_t delta = DNODE_SIZE + used;
-		if (subtract)
-			delta = -delta;
-		VERIFY3U(0, ==, zap_increment_int(os, DMU_USERUSED_OBJECT,
-		    user, delta, tx));
-		VERIFY3U(0, ==, zap_increment_int(os, DMU_GROUPUSED_OBJECT,
-		    group, delta, tx));
+		if (zfs_dmu_userused_action == 1) {
+			char name[20];
+
+			(void) snprintf(name, sizeof (name), "%llx", (longlong_t)user);
+			(void) zap_remove(os, DMU_USERUSED_OBJECT, name, tx);
+			(void) snprintf(name, sizeof (name), "%llx", (longlong_t)group);
+			(void) zap_remove(os, DMU_GROUPUSED_OBJECT, name, tx);
+		} else {
+			if (subtract && zfs_dmu_userused_action == 0)
+				delta = -delta;
+			VERIFY3U(0, ==, zap_increment_int(os, DMU_USERUSED_OBJECT,
+			    user, delta, tx));
+			VERIFY3U(0, ==, zap_increment_int(os, DMU_GROUPUSED_OBJECT,
+			    group, delta, tx));
+		}
 	}
 }
 
@@ -1487,6 +1499,46 @@ dmu_objset_userspace_upgrade(objset_t *os)
 	txg_wait_synced(dmu_objset_pool(os), 0);
 	return (0);
 }
+
+int
+dmu_objset_userspace_rebuild(objset_t *os)
+{
+	uint64_t obj;
+	int err = 0;
+
+	if (dmu_objset_is_snapshot(os))
+		return (SET_ERROR(EINVAL));
+	if (!dmu_objset_userused_enabled(os))
+		return (SET_ERROR(ENOTSUP));
+
+	for (obj = 0; err == 0; err = dmu_object_next(os, &obj, FALSE, 0)) {
+		dmu_tx_t *tx;
+		dmu_buf_t *db;
+		int objerr;
+
+		if (issig(JUSTLOOKING) && issig(FORREAL))
+			return (SET_ERROR(EINTR));
+
+		objerr = dmu_bonus_hold(os, obj, FTAG, &db);
+		if (objerr != 0)
+			continue;
+		tx = dmu_tx_create(os);
+		dmu_tx_hold_bonus(tx, obj);
+		objerr = dmu_tx_assign(tx, TXG_WAIT);
+		if (objerr != 0) {
+			dmu_tx_abort(tx);
+			continue;
+		}
+		dmu_buf_will_dirty(db, tx);
+		dmu_buf_rele(db, FTAG);
+		dmu_tx_commit(tx);
+	}
+
+	os->os_flags |= OBJSET_FLAG_USERACCOUNTING_COMPLETE;
+	txg_wait_synced(dmu_objset_pool(os), 0);
+	return (0);
+}
+
 
 void
 dmu_objset_space(objset_t *os, uint64_t *refdbytesp, uint64_t *availbytesp,
@@ -2044,5 +2096,9 @@ EXPORT_SYMBOL(dmu_objset_do_userquota_updates);
 EXPORT_SYMBOL(dmu_objset_userquota_get_ids);
 EXPORT_SYMBOL(dmu_objset_userused_enabled);
 EXPORT_SYMBOL(dmu_objset_userspace_upgrade);
+EXPORT_SYMBOL(dmu_objset_userspace_rebuild);
 EXPORT_SYMBOL(dmu_objset_userspace_present);
+
+module_param(zfs_dmu_userused_action, int, 0644);
+MODULE_PARM_DESC(zfs_dmu_userused_action, "Management of user/group used values: 0=normal, 1=clear, 2=increment");
 #endif
