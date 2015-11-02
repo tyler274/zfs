@@ -198,7 +198,7 @@ static uint64_t metaslab_fragmentation(metaslab_t *);
  * into fewer larger trim operations (which should help with devices
  * which do not take so kindly to them) and to allow for disaster
  * recovery (extents won't get trimmed immediately, but instead only
- * after passing this rather long timeout, thus not preserving
+ * after passing this rather long timeout, thus preserving
  * 'zfs import -F' functionality).
  */
 unsigned int zfs_txgs_per_trim = 32;
