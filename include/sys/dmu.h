@@ -314,6 +314,8 @@ typedef struct dmu_buf {
 #define	DMU_POOL_FREE_BPOBJ		"free_bpobj"
 #define	DMU_POOL_BPTREE_OBJ		"bptree_obj"
 #define	DMU_POOL_EMPTY_BPOBJ		"empty_bpobj"
+#define	DMU_POOL_TRIM_START_TIME	"trim_start_time"
+#define	DMU_POOL_TRIM_STOP_TIME		"trim_stop_time"
 
 /*
  * Allocate an object from this objset.  The range of object numbers
