@@ -1275,15 +1275,15 @@ spa_unload(spa_t *spa)
 	ASSERT(MUTEX_HELD(&spa_namespace_lock));
 
 	/*
+	 * Stop on-demand trim before stopping spa sync, because on-demand
+	 * trim needs to execute synctasks at shutdown.
+	 */
+	spa_trim_stop_wait(spa);
+
+	/*
 	 * Stop async tasks.
 	 */
 	spa_async_suspend(spa);
-
-	/*
-	 * Stop autotrim tasks.
-	 */
-	if (spa->spa_auto_trim_taskq)
-		spa_auto_trim_taskq_destroy(spa);
 
 	/*
 	 * Stop syncing.
@@ -1307,7 +1307,14 @@ spa_unload(spa_t *spa)
 
 	spa_config_enter(spa, SCL_ALL, FTAG, RW_WRITER);
 
-	spa_trim_stop_wait(spa);
+	/*
+	 * Stop autotrim tasks.
+	 */
+	if (spa->spa_trim_taskq) {
+		mutex_enter(&spa->spa_trim_taskq_lock);
+		spa_trim_taskq_destroy(spa, B_TRUE, B_FALSE);
+		mutex_exit(&spa->spa_trim_taskq_lock);
+	}
 
 	/*
 	 * Close all vdevs.
@@ -2684,11 +2691,19 @@ spa_load_impl(spa_t *spa, uint64_t pool_guid, nvlist_t *config,
 		    &spa->spa_dedup_ditto);
 		spa_prop_find(spa, ZPOOL_PROP_FORCETRIM, &spa->spa_force_trim);
 		spa_prop_find(spa, ZPOOL_PROP_AUTOTRIM, &spa->spa_auto_trim);
-		if (spa->spa_auto_trim == SPA_AUTO_TRIM_ON)
-			spa_auto_trim_taskq_create(spa);
+		if (spa->spa_auto_trim == SPA_AUTO_TRIM_ON) {
+			mutex_enter(&spa->spa_trim_taskq_lock);
+			spa_trim_taskq_create(spa, B_FALSE);
+			mutex_exit(&spa->spa_trim_taskq_lock);
+		}
 
 		spa->spa_autoreplace = (autoreplace != 0);
 	}
+
+	(void) spa_dir_prop(spa, DMU_POOL_TRIM_START_TIME,
+	    &spa->spa_trim_start_time);
+	(void) spa_dir_prop(spa, DMU_POOL_TRIM_STOP_TIME,
+	    &spa->spa_trim_stop_time);
 
 	/*
 	 * If the 'autoreplace' property is set, then post a resource notifying
@@ -3813,8 +3828,11 @@ spa_create(const char *pool, nvlist_t *nvroot, nvlist_t *props,
 	spa->spa_autoexpand = zpool_prop_default_numeric(ZPOOL_PROP_AUTOEXPAND);
 	spa->spa_force_trim = zpool_prop_default_numeric(ZPOOL_PROP_FORCETRIM);
 	spa->spa_auto_trim = zpool_prop_default_numeric(ZPOOL_PROP_AUTOTRIM);
-	if (spa->spa_auto_trim == SPA_AUTO_TRIM_ON)
-		spa_auto_trim_taskq_create(spa);
+	if (spa->spa_auto_trim == SPA_AUTO_TRIM_ON) {
+		mutex_enter(&spa->spa_trim_taskq_lock);
+		spa_trim_taskq_create(spa, B_FALSE);
+		mutex_exit(&spa->spa_trim_taskq_lock);
+	}
 
 	if (props != NULL) {
 		spa_configfile_set(spa, props, B_FALSE);
@@ -5916,6 +5934,12 @@ spa_async_thread(spa_t *spa)
 	if (tasks & SPA_ASYNC_RESILVER)
 		dsl_resilver_restart(spa->spa_dsl_pool, 0);
 
+	if (tasks & SPA_ASYNC_TRIM_TASKQ_DESTROY) {
+		mutex_enter(&spa->spa_trim_taskq_lock);
+		spa_trim_taskq_destroy(spa, B_FALSE, B_FALSE);
+		mutex_exit(&spa->spa_trim_taskq_lock);
+	}
+
 	/*
 	 * Let the world know that we're done.
 	 */
@@ -5984,6 +6008,15 @@ spa_async_request(spa_t *spa, int task)
 	zfs_dbgmsg("spa=%s async request task=%u", spa->spa_name, task);
 	mutex_enter(&spa->spa_async_lock);
 	spa->spa_async_tasks |= task;
+	mutex_exit(&spa->spa_async_lock);
+}
+
+void
+spa_async_unrequest(spa_t *spa, int task)
+{
+	zfs_dbgmsg("spa=%s async unrequest task=%u", spa->spa_name, task);
+	mutex_enter(&spa->spa_async_lock);
+	spa->spa_async_tasks &= ~task;
 	mutex_exit(&spa->spa_async_lock);
 }
 
@@ -6297,11 +6330,14 @@ spa_sync_props(void *arg, dmu_tx_t *tx)
 			case ZPOOL_PROP_AUTOTRIM:
 				if (intval != spa->spa_auto_trim) {
 					spa->spa_auto_trim = intval;
+					mutex_enter(&spa->spa_trim_taskq_lock);
 					if (intval)
-						spa_auto_trim_taskq_create(spa);
+						spa_trim_taskq_create(spa,
+						    B_TRUE);
 					else
-						spa_auto_trim_taskq_destroy(
-						    spa);
+						spa_trim_taskq_destroy(spa,
+						    B_FALSE, B_TRUE);
+					mutex_exit(&spa->spa_trim_taskq_lock);
 				}
 				break;
 			case ZPOOL_PROP_AUTOEXPAND:
@@ -6392,14 +6428,14 @@ spa_auto_trim_dispatch(spa_t *spa, uint64_t txg)
 {
 	uint64_t i;
 
-	ASSERT(spa->spa_auto_trim_taskq != NULL);
+	ASSERT(spa->spa_trim_taskq != NULL);
 	for (i = 0; i < spa->spa_root_vdev->vdev_children; i++) {
 		vdev_auto_trim_info_t *vati = kmem_zalloc(sizeof (*vati),
 		    KM_SLEEP);
 		vati->vati_vdev = spa->spa_root_vdev->vdev_child[i];
 		vati->vati_txg = txg;
 		spa_config_enter(spa, SCL_TRIM_ALL, vati, RW_READER);
-		(void) taskq_dispatch(spa->spa_auto_trim_taskq,
+		(void) taskq_dispatch(spa->spa_trim_taskq,
 		    (void (*)(void *))vdev_auto_trim, vati, TQ_SLEEP);
 	}
 }
@@ -6820,6 +6856,42 @@ spa_event_notify(spa_t *spa, vdev_t *vd, const char *name)
 
 
 /*
+ * Performs the sync update of the MOS pool directory's trim start/stop values.
+ */
+static void
+spa_trim_update_time_sync(void *arg, dmu_tx_t *tx)
+{
+	spa_t *spa = arg;
+	VERIFY0(zap_update(spa->spa_meta_objset, DMU_POOL_DIRECTORY_OBJECT,
+	    DMU_POOL_TRIM_START_TIME, sizeof (uint64_t), 1,
+	    &spa->spa_trim_start_time, tx));
+	VERIFY0(zap_update(spa->spa_meta_objset, DMU_POOL_DIRECTORY_OBJECT,
+	    DMU_POOL_TRIM_STOP_TIME, sizeof (uint64_t), 1,
+	    &spa->spa_trim_stop_time, tx));
+}
+
+/*
+ * Updates the in-core and on-disk on-demand TRIM operation start/stop time.
+ * Passing UINT64_MAX for either start_time or stop_time means that no
+ * update to that value should be recorded.
+ * This function blocks for the on-disk update and therefore must NOT be
+ * called holding spa_trim_taskq_lock (which could be called from syncing
+ * context, leading to a deadlock).
+ */
+static void
+spa_trim_update_time(spa_t *spa, uint64_t start_time, uint64_t stop_time)
+{
+	ASSERT(MUTEX_HELD(&spa->spa_trim_ondemand_lock));
+	ASSERT(!MUTEX_HELD(&spa->spa_trim_taskq_lock));
+	if (start_time != UINT64_MAX)
+		spa->spa_trim_start_time = start_time;
+	if (stop_time != UINT64_MAX)
+		spa->spa_trim_stop_time = stop_time;
+	(void) dsl_sync_task_dp(spa_get_dsl(spa), NULL,
+	    spa_trim_update_time_sync, spa, 1, ZFS_SPACE_CHECK_RESERVED);
+}
+
+/*
  * Initiates an on-demand TRIM of the whole pool. This kicks off individual
  * TRIM tasks for each top-level vdev, which then pass over all of the free
  * space in all of the vdev's metaslabs and issues TRIM commands for that
@@ -6830,14 +6902,13 @@ spa_trim(spa_t *spa, uint64_t rate)
 {
 	uint64_t i;
 
-	if (rate != 0) {
+	if (rate != 0)
 		spa->spa_trim_rate = MAX(rate, spa_min_trim_rate(spa));
-	} else {
+	else
 		spa->spa_trim_rate = 0;
-	}
 
-	spa_config_enter(spa, SCL_TRIM_ALL, FTAG, RW_WRITER);
-	mutex_enter(&spa->spa_trim_lock);
+	spa_config_enter(spa, SCL_TRIM_ALL, FTAG, RW_READER);
+	mutex_enter(&spa->spa_trim_ondemand_lock);
 
 	if (spa->spa_num_trimming) {
 		/*
@@ -6845,14 +6916,16 @@ spa_trim(spa_t *spa, uint64_t rate)
 		 * threads because the trim rate might have changed above.
 		 */
 		cv_broadcast(&spa->spa_trim_update_cv);
-		mutex_exit(&spa->spa_trim_lock);
+		mutex_exit(&spa->spa_trim_ondemand_lock);
 		spa_config_exit(spa, SCL_TRIM_ALL, FTAG);
 		return;
 	}
 
-	spa_event_notify(spa, NULL, FM_EREPORT_ZFS_TRIM_START);
-
 	spa->spa_trim_stop = B_FALSE;
+
+	spa_event_notify(spa, NULL, FM_EREPORT_ZFS_TRIM_START);
+	mutex_enter(&spa->spa_trim_taskq_lock);
+	spa_trim_taskq_create(spa, B_FALSE);
 	for (i = 0; i < spa->spa_root_vdev->vdev_children; i++) {
 		vdev_t *vd = spa->spa_root_vdev->vdev_child[i];
 		vdev_trim_info_t *vti = kmem_zalloc(sizeof (*vti), KM_SLEEP);
@@ -6862,15 +6935,13 @@ spa_trim(spa_t *spa, uint64_t rate)
 		vti->vti_done_arg = spa;
 		spa->spa_num_trimming++;
 
-		/* released in spa_vdev_trim_all_done */
-		spa_open_ref(spa, vti);
-
 		vd->vdev_trim_prog = 0;
-		VERIFY3U(taskq_dispatch(system_taskq,
-		    (void (*)(void *))vdev_trim_all, vti,
-		    TQ_SLEEP | TQ_NOQUEUE), !=, 0);
+		(void) taskq_dispatch(spa->spa_trim_taskq,
+		    (void (*)(void *))vdev_trim_all, vti, TQ_SLEEP);
 	}
-	mutex_exit(&spa->spa_trim_lock);
+	mutex_exit(&spa->spa_trim_taskq_lock);
+	spa_trim_update_time(spa, gethrestime_sec(), 0);
+	mutex_exit(&spa->spa_trim_ondemand_lock);
 	spa_config_exit(spa, SCL_TRIM_ALL, FTAG);
 }
 
@@ -6880,56 +6951,67 @@ spa_trim(spa_t *spa, uint64_t rate)
 extern void
 spa_trim_stop(spa_t *spa)
 {
-	mutex_enter(&spa->spa_trim_lock);
+	mutex_enter(&spa->spa_trim_ondemand_lock);
 	spa->spa_trim_stop = B_TRUE;
 	cv_broadcast(&spa->spa_trim_update_cv);
-	mutex_exit(&spa->spa_trim_lock);
+	mutex_exit(&spa->spa_trim_ondemand_lock);
 }
 
 /*
  * Orders an on-demand TRIM operation to stop and waits for it to complete.
- * You must hold the SCL_TRIM_ALL locks in order to guarantee that after
- * returning from this function, no further on-demand TRIMs can be started
- * if you are using spa_trim_stop_wait() to stop on-demand TRIMs in a
- * critical code region.
+ * You must hold the spa_namespace_lock in order to guarantee that after
+ * returning from this function, no further on-demand TRIMs can be started.
  */
 static void
 spa_trim_stop_wait(spa_t *spa)
 {
-	ASSERT3S(spa_config_held(spa, SCL_TRIM_ALL, RW_READER), ==,
-	    SCL_TRIM_ALL);
-	mutex_enter(&spa->spa_trim_lock);
+	ASSERT(MUTEX_HELD(&spa_namespace_lock));
+	mutex_enter(&spa->spa_trim_ondemand_lock);
 	spa->spa_trim_stop = B_TRUE;
 	cv_broadcast(&spa->spa_trim_update_cv);
 	while (spa->spa_num_trimming)
-		cv_wait(&spa->spa_trim_done_cv, &spa->spa_trim_lock);
-	mutex_exit(&spa->spa_trim_lock);
+		cv_wait(&spa->spa_trim_done_cv, &spa->spa_trim_ondemand_lock);
+	mutex_exit(&spa->spa_trim_ondemand_lock);
 }
 
 /*
- * Returns on-demand TRIM progress. Progress is indicated in the number
- * of bytes in total that on-demand TRIM has already passed (whether
- * allocated or not). Completion of the operation is indicated when either
- * the returned value is zero, or when the returned value is equal to the
- * sum of the sizes of all top-level vdevs.
+ * Returns on-demand TRIM progress. Progress is indicated by four return values:
+ * 1) prog: the number of bytes of space on thep ool in total that on-demand
+ *	TRIM has already passed (regardless if the space is allocated or not).
+ *	Completion of the operation is indicated when either the returned value
+ *	is zero, or when the returned value is equal to the sum of the sizes of
+ *	all top-level vdevs.
+ * 2) rate: the trim rate in bytes per second. A value of zero indicates that
+ *	trim progresses as fast as possible.
+ * 3) start_time: the UNIXTIME of when the last on-demand TRIM operation was
+ *	started. If no on-demand trim was ever initiated on the pool, this is
+ *	zero.
+ * 4) stop_time: the UNIXTIME of when the last on-demand TRIM operation has
+ *	stopped on the pool. If a trim was started (start_time != 0), but has
+ *	not yet completed, stop_time will be zero. If a trim is NOT currently
+ *	ongoing and start_time is non-zero, this indicates that the previously
+ *	initiated TRIM operation was interrupted.
  */
-extern uint64_t
-spa_get_trim_prog(spa_t *spa)
+extern void
+spa_get_trim_prog(spa_t *spa, uint64_t *prog, uint64_t *rate,
+    uint64_t *start_time, uint64_t *stop_time)
 {
 	uint64_t total = 0;
 	vdev_t *root_vd = spa->spa_root_vdev;
 	uint64_t i;
 
 	ASSERT(spa_config_held(spa, SCL_CONFIG, RW_READER));
-	mutex_enter(&spa->spa_trim_lock);
+	mutex_enter(&spa->spa_trim_ondemand_lock);
 	if (spa->spa_num_trimming > 0) {
 		for (i = 0; i < root_vd->vdev_children; i++) {
 			total += root_vd->vdev_child[i]->vdev_trim_prog;
 		}
 	}
-	mutex_exit(&spa->spa_trim_lock);
-
-	return (total);
+	*prog = total;
+	*rate = spa->spa_trim_rate;
+	*start_time = spa->spa_trim_start_time;
+	*stop_time = spa->spa_trim_stop_time;
+	mutex_exit(&spa->spa_trim_ondemand_lock);
 }
 
 /*
@@ -6940,14 +7022,19 @@ spa_vdev_trim_all_done(vdev_trim_info_t *vti)
 {
 	spa_t *spa = vti->vti_done_arg;
 
-	mutex_enter(&spa->spa_trim_lock);
+	mutex_enter(&spa->spa_trim_ondemand_lock);
 	ASSERT(spa->spa_num_trimming != 0);
 	spa->spa_num_trimming--;
-	if (spa->spa_num_trimming == 0)
+	if (spa->spa_num_trimming == 0) {
 		spa_event_notify(spa, NULL, FM_EREPORT_ZFS_TRIM_FINISH);
-	spa_close(spa, vti);
+		spa_async_request(spa, SPA_ASYNC_TRIM_TASKQ_DESTROY);
+		/* if we were interrupted, leave stop_time at zero */
+		if (!spa->spa_trim_stop)
+			spa_trim_update_time(spa, UINT64_MAX,
+			    gethrestime_sec());
+	}
 	cv_broadcast(&spa->spa_trim_done_cv);
-	mutex_exit(&spa->spa_trim_lock);
+	mutex_exit(&spa->spa_trim_ondemand_lock);
 }
 
 /*
