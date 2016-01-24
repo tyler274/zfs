@@ -1173,10 +1173,15 @@ void
 kernel_init(int mode)
 {
 	extern uint_t rrw_tsd_key;
+	char *mem;
 
 	umem_nofail_callback(umem_out_of_memory);
 
-	physmem = sysconf(_SC_PHYS_PAGES);
+	mem = getenv("ZFS_PHYSMEM");
+	if (mem)
+		physmem = strtoull(mem, NULL, 0);
+	if (physmem == 0)
+		physmem = sysconf(_SC_PHYS_PAGES);
 
 	dprintf("physmem = %llu pages (%.2f GB)\n", physmem,
 	    (double)physmem * sysconf(_SC_PAGE_SIZE) / (1ULL << 30));

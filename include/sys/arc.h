@@ -225,6 +225,7 @@ void l2arc_stop(void);
 
 #ifndef _KERNEL
 extern boolean_t arc_watch;
+extern int arc_get_kstat(int, char **, uint64_t *);
 #endif
 
 #ifdef	__cplusplus

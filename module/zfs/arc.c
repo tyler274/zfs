@@ -7057,6 +7057,30 @@ l2arc_stop(void)
 	mutex_exit(&l2arc_feed_thr_lock);
 }
 
+#ifndef _KERNEL
+/*
+ * Get the name and value of a single ARC kstat.
+ *
+ * Returns:
+ *	0 on success
+ *	1 on failure
+ */
+int
+arc_get_kstat(int index, char **name, uint64_t *val)
+{
+	kstat_named_t *stats;
+
+	if (val == NULL || index < 0 ||
+	    index > sizeof (arc_stats) / sizeof (kstat_named_t) - 1)
+		return (1);
+
+	stats = &(((kstat_named_t *)&arc_stats)[index]);
+	*name = stats->name;
+	*val = stats->value.ui64;
+	return (0);
+}
+#endif
+
 #if defined(_KERNEL) && defined(HAVE_SPL)
 EXPORT_SYMBOL(arc_buf_size);
 EXPORT_SYMBOL(arc_write);

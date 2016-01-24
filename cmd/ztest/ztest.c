@@ -596,6 +596,27 @@ nicenumtoull(const char *buf)
 }
 
 static void
+arcstats(void)
+{
+	int i = 0;
+	uint64_t val;
+	char *name;
+
+	if (ztest_opts.zo_verbose < 2)
+		return;
+
+	(void) printf("\nArcstats:\n");
+	for (;;) {
+		if (arc_get_kstat(i, &name, &val) != 0)
+			break;
+		if (val)
+			(void) printf("%-31s %-4d %llu\n", name, 4,
+			    (unsigned long long)val);
+		++i;
+	}
+}
+
+static void
 usage(boolean_t requested)
 {
 	const ztest_shared_opts_t *zo = &ztest_opts_defaults;
@@ -2444,6 +2465,7 @@ ztest_spa_create_destroy(ztest_ds_t *zd, uint64_t id)
 	nvlist_free(nvroot);
 	VERIFY3U(0, ==, spa_open(zo->zo_pool, &spa, FTAG));
 	VERIFY3U(EBUSY, ==, spa_destroy(zo->zo_pool));
+	arcstats();
 	spa_close(spa, FTAG);
 
 	(void) rw_unlock(&ztest_name_lock);
@@ -2515,6 +2537,7 @@ ztest_spa_upgrade(ztest_ds_t *zd, uint64_t id)
 	VERIFY3U(spa_version(spa), >, version);
 	VERIFY3U(spa_version(spa), ==, fnvlist_lookup_uint64(spa->spa_config,
 	    zpool_prop_to_name(ZPOOL_PROP_VERSION)));
+	arcstats();
 	spa_close(spa, FTAG);
 
 	strfree(name);
@@ -5352,6 +5375,7 @@ ztest_spa_rename(ztest_ds_t *zd, uint64_t id)
 	VERIFY3U(0, ==, spa_open(newname, &spa, FTAG));
 
 	ASSERT(spa == ztest_spa);
+	arcstats();
 	spa_close(spa, FTAG);
 
 	/*
@@ -5365,6 +5389,7 @@ ztest_spa_rename(ztest_ds_t *zd, uint64_t id)
 	VERIFY3U(0, ==, spa_open(oldname, &spa, FTAG));
 
 	ASSERT(spa == ztest_spa);
+	arcstats();
 	spa_close(spa, FTAG);
 
 	umem_free(newname, strlen(newname) + 1);
@@ -5504,6 +5529,7 @@ ztest_spa_import_export(char *oldname, char *newname)
 		(void) spa_scan(spa, POOL_SCAN_SCRUB);
 
 	pool_guid = spa_guid(spa);
+	arcstats();
 	spa_close(spa, FTAG);
 
 	ztest_walk_pool_directory("pools before export");
@@ -5554,6 +5580,7 @@ ztest_spa_import_export(char *oldname, char *newname)
 	 */
 	VERIFY3U(0, ==, spa_open(newname, &spa, FTAG));
 	ASSERT(pool_guid == spa_guid(spa));
+	arcstats();
 	spa_close(spa, FTAG);
 
 	nvlist_free(config);
@@ -5940,6 +5967,7 @@ ztest_run(ztest_shared_t *zs)
 	if (zc_cb_counter >= ZTEST_COMMIT_CB_MIN_REG)
 		VERIFY0(zc_min_txg_delay);
 
+	arcstats();
 	spa_close(spa, FTAG);
 
 	/*
@@ -6043,6 +6071,7 @@ ztest_freeze(void)
 	 * Close our dataset and close the pool.
 	 */
 	ztest_dataset_close(0);
+	arcstats();
 	spa_close(spa, FTAG);
 	kernel_fini();
 
@@ -6060,6 +6089,7 @@ ztest_freeze(void)
 	txg_wait_synced(spa_get_dsl(spa), 0);
 	ztest_reguid(NULL, 0);
 
+	arcstats();
 	spa_close(spa, FTAG);
 	kernel_fini();
 }
@@ -6142,6 +6172,7 @@ ztest_init(ztest_shared_t *zs)
 	VERIFY3U(0, ==, spa_open(ztest_opts.zo_pool, &spa, FTAG));
 	zs->zs_metaslab_sz =
 	    1ULL << spa->spa_root_vdev->vdev_child[0]->vdev_ms_shift;
+	arcstats();
 	spa_close(spa, FTAG);
 
 	kernel_fini();
@@ -6532,6 +6563,7 @@ main(int argc, char **argv)
 		 */
 		kernel_init(FREAD);
 		if (spa_open(ztest_opts.zo_pool, &spa, FTAG) == 0) {
+			arcstats();
 			spa_close(spa, FTAG);
 		} else {
 			char tmpname[MAXNAMELEN];
