@@ -10,7 +10,7 @@
  */
 
 /*
- * Copyright 2015 Nexenta Inc.  All rights reserved.
+ * Copyright 2016 Nexenta Inc.  All rights reserved.
  */
 
 #ifndef _SYS_DKIOC_FREE_UTIL_H

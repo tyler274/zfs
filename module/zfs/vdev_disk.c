@@ -24,6 +24,7 @@
  * Rewritten for Linux by Brian Behlendorf <behlendorf1@llnl.gov>.
  * LLNL-CODE-403049.
  * Copyright (c) 2012, 2015 by Delphix. All rights reserved.
+ * Copyright 2016 Nexenta Systems, Inc.  All rights reserved.
  */
 
 #include <sys/zfs_context.h>
