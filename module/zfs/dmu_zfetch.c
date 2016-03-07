@@ -155,7 +155,8 @@ dmu_zfetch_stream_create(zfetch_t *zf, uint64_t blkid)
 	int numstreams = 0;
 	uint32_t max_streams;
 
-	ASSERT(RW_WRITE_HELD(&zf->zf_rwlock));
+	if (!rw_tryenter(&zf->zf_rwlock, RW_WRITER))
+		return;
 
 	/*
 	 * Clean up old streams.
@@ -183,6 +184,7 @@ dmu_zfetch_stream_create(zfetch_t *zf, uint64_t blkid)
 	    zfetch_max_distance));
 	if (numstreams >= max_streams) {
 		ZFETCHSTAT_BUMP(zfetchstat_max_streams);
+		goto out;
 		return;
 	}
 
@@ -193,6 +195,8 @@ dmu_zfetch_stream_create(zfetch_t *zf, uint64_t blkid)
 	mutex_init(&zs->zs_lock, NULL, MUTEX_DEFAULT, NULL);
 
 	list_insert_head(&zf->zf_stream, zs);
+out:
+	rw_exit(&zf->zf_rwlock);
 }
 
 /*
@@ -235,15 +239,15 @@ dmu_zfetch(zfetch_t *zf, uint64_t blkid, uint64_t nblks)
 		}
 	}
 
+	rw_exit(&zf->zf_rwlock);
+
 	if (zs == NULL) {
 		/*
 		 * This access is not part of any existing stream.  Create
 		 * a new stream for it.
 		 */
 		ZFETCHSTAT_BUMP(zfetchstat_misses);
-		if (rw_tryupgrade(&zf->zf_rwlock))
-			dmu_zfetch_stream_create(zf, blkid + nblks);
-		rw_exit(&zf->zf_rwlock);
+		dmu_zfetch_stream_create(zf, blkid + nblks);
 		return;
 	}
 
@@ -279,7 +283,6 @@ dmu_zfetch(zfetch_t *zf, uint64_t blkid, uint64_t nblks)
 	 * we do not want to hold any locks while we call it.
 	 */
 	mutex_exit(&zs->zs_lock);
-	rw_exit(&zf->zf_rwlock);
 	for (i = 0; i < pf_nblks; i++) {
 		dbuf_prefetch(zf->zf_dnode, 0, pf_start + i,
 		    ZIO_PRIORITY_ASYNC_READ, ARC_FLAG_PREDICTIVE_PREFETCH);
