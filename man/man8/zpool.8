@@ -744,10 +744,10 @@ details on feature states.
 .RS 4n
 When set to \fBon\fR, while deleting data, ZFS will inform the underlying
 vdevs of any blocks that have been marked as freed. This allows thinly
-provisioned vdevs to reclaim unused blocks. Currently, this feature
-supports sending SCSI UNMAP commands to SCSI and SAS disk vdevs, and
-using file hole punching on file-backed vdevs. SATA TRIM is currently
-not implemented. The default setting for this property is \fBoff\fR.
+provisioned vdevs to reclaim unused blocks. This feature is supported on
+file vdevs via hole punching if it is supported by their underlying file system
+and on block device vdevs if their underlying driver supports BLKDISCARD.
+The default setting for this property is \fBoff\fR.
 .sp
 Please note that automatic trimming of data blocks can put significant
 stress on the underlying storage devices if they do not handle these
@@ -2079,6 +2079,9 @@ Adding a vdev during TRIM is supported, although the progression display
 in \fBzpool status\fR might not be entirely accurate in that case (TRIM
 will complete before reaching 100%). Removing or detaching a vdev will
 prematurely terminate an on-demand TRIM operation.
+.sp
+See the documentation for the \fBautotrim\fR property above for a description
+of the vdevs on which \fBzpool trim\fR is supported.
 .sp
 .ne 2
 .na
