@@ -634,15 +634,15 @@ extern void spa_inject_delref(spa_t *spa);
 extern void spa_scan_stat_init(spa_t *spa);
 extern int spa_scan_get_stats(spa_t *spa, pool_scan_stat_t *ps);
 
-#define	SPA_ASYNC_CONFIG_UPDATE		0x01
-#define	SPA_ASYNC_REMOVE		0x02
-#define	SPA_ASYNC_PROBE			0x04
-#define	SPA_ASYNC_RESILVER_DONE		0x08
-#define	SPA_ASYNC_RESILVER		0x10
-#define	SPA_ASYNC_AUTOEXPAND		0x20
-#define	SPA_ASYNC_REMOVE_DONE		0x40
-#define	SPA_ASYNC_REMOVE_STOP		0x80
-#define	SPA_ASYNC_TRIM_TASKQ_DESTROY	0x100
+#define	SPA_ASYNC_CONFIG_UPDATE			0x01
+#define	SPA_ASYNC_REMOVE			0x02
+#define	SPA_ASYNC_PROBE				0x04
+#define	SPA_ASYNC_RESILVER_DONE			0x08
+#define	SPA_ASYNC_RESILVER			0x10
+#define	SPA_ASYNC_AUTOEXPAND			0x20
+#define	SPA_ASYNC_REMOVE_DONE			0x40
+#define	SPA_ASYNC_REMOVE_STOP			0x80
+#define	SPA_ASYNC_MAN_TRIM_TASKQ_DESTROY	0x100
 
 /*
  * Controls the behavior of spa_vdev_remove().
@@ -681,10 +681,11 @@ extern int spa_scan(spa_t *spa, pool_scan_func_t func);
 extern int spa_scan_stop(spa_t *spa);
 
 /* trimming */
-extern void spa_trim(spa_t *spa, uint64_t rate);
-extern void spa_trim_stop(spa_t *spa);
+extern void spa_man_trim(spa_t *spa, uint64_t rate);
+extern void spa_man_trim_stop(spa_t *spa);
 extern void spa_get_trim_prog(spa_t *spa, uint64_t *prog, uint64_t *rate,
     uint64_t *start_time, uint64_t *stop_time);
+extern void spa_trim_stop_wait(spa_t *spa);
 
 /* spa syncing */
 extern void spa_sync(spa_t *spa, uint64_t txg); /* only for DMU use */
@@ -737,7 +738,6 @@ extern boolean_t spa_refcount_zero(spa_t *spa);
 #define	SCL_LOCKS	7
 #define	SCL_ALL		((1 << SCL_LOCKS) - 1)
 #define	SCL_STATE_ALL	(SCL_STATE | SCL_L2ARC | SCL_ZIO)
-#define	SCL_TRIM_ALL	(SCL_CONFIG | SCL_STATE | SCL_ZIO)
 
 /* Historical pool statistics */
 typedef struct spa_stats_history {
@@ -932,6 +932,7 @@ extern void spa_event_notify(spa_t *spa, vdev_t *vdev, const char *name);
 /* TRIM/UNMAP kstat update */
 extern void spa_trimstats_update(spa_t *spa, uint64_t extents, uint64_t bytes,
     uint64_t extents_skipped, uint64_t bytes_skipped);
+extern void spa_trimstats_auto_slow_incr(spa_t *spa);
 
 #ifdef ZFS_DEBUG
 #define	dprintf_bp(bp, fmt, ...) do {				\
