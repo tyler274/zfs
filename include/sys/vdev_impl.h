@@ -126,14 +126,6 @@ struct vdev_queue {
 };
 
 /*
- * Compound argument to vdev_auto_trim().
- */
-typedef struct vdev_auto_trim_info {
-	vdev_t		*vati_vdev;
-	uint64_t	vati_txg;
-} vdev_auto_trim_info_t;
-
-/*
  * Virtual device descriptor
  */
 struct vdev {
@@ -334,7 +326,6 @@ extern void vdev_sync(vdev_t *vd, uint64_t txg);
 extern void vdev_sync_done(vdev_t *vd, uint64_t txg);
 extern void vdev_dirty(vdev_t *vd, int flags, void *arg, uint64_t txg);
 extern void vdev_dirty_leaves(vdev_t *vd, int flags, uint64_t txg);
-extern void vdev_auto_trim(vdev_auto_trim_info_t *vd);
 
 /*
  * Available vdev types.
