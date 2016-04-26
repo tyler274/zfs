@@ -1050,7 +1050,7 @@ zio_trim(spa_t *spa, vdev_t *vd, struct range_tree *tree,
 		return (sub_pio);
 
 	num_exts = avl_numnodes(&tree->rt_root);
-	dfl = vmem_zalloc(DFL_SZ(num_exts), KM_SLEEP);
+	dfl = dfl_alloc(num_exts, KM_SLEEP);
 	dfl->dfl_flags = trim_flags;
 	dfl->dfl_num_exts = num_exts;
 	dfl->dfl_offset = VDEV_LABEL_START_SIZE;
@@ -1087,7 +1087,7 @@ zio_trim(spa_t *spa, vdev_t *vd, struct range_tree *tree,
 
 	/* the zfs_trim_min_ext_sz filter may have shortened the list */
 	if (dfl->dfl_num_exts != rs_idx) {
-		dkioc_free_list_t *dfl2 = vmem_zalloc(DFL_SZ(rs_idx), KM_SLEEP);
+		dkioc_free_list_t *dfl2 = dfl_alloc(rs_idx, KM_SLEEP);
 		bcopy(dfl, dfl2, DFL_SZ(rs_idx));
 		dfl2->dfl_num_exts = rs_idx;
 		dfl_free(dfl);
