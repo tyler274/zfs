@@ -2174,7 +2174,7 @@ vdev_raidz_trim(vdev_t *vd, zio_t *pio, void *trim_exts)
 		 * be longer than the parent list, but they can be shorter.
 		 * The underlying driver will discard zero-length extents.
 		 */
-		sub_dfls[i] = vmem_zalloc(DFL_SZ(dfl->dfl_num_exts), KM_SLEEP);
+		sub_dfls[i] = dfl_alloc(dfl->dfl_num_exts, KM_SLEEP);
 		sub_dfls[i]->dfl_num_exts = dfl->dfl_num_exts;
 		sub_dfls[i]->dfl_flags = dfl->dfl_flags;
 		sub_dfls[i]->dfl_offset = dfl->dfl_offset;
