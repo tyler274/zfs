@@ -2062,6 +2062,25 @@ spa_maxdnodesize(spa_t *spa)
 		return (DNODE_MIN_SIZE);
 }
 
+int
+spa_trimstats_kstat_update(kstat_t *ksp, int rw)
+{
+	spa_t *spa;
+	spa_trimstats_t *trimstats;
+	int i;
+
+	ASSERT(ksp != NULL);
+
+	if (rw == KSTAT_WRITE) {
+		spa = ksp->ks_private;
+		trimstats = spa->spa_trimstats;
+		for (i = 0; i < sizeof (spa_trimstats_t) /
+		    sizeof (kstat_named_t); ++i)
+			((kstat_named_t *)trimstats)[i].value.ui64 = 0;
+	}
+	return (0);
+}
+
 /*
  * Creates the trim kstats structure for a spa.
  */
@@ -2069,6 +2088,7 @@ static void
 spa_trimstats_create(spa_t *spa)
 {
 	char name[KSTAT_STRLEN];
+	kstat_t *ksp;
 
 	if (spa->spa_name[0] == '$')
 		return;
@@ -2077,10 +2097,13 @@ spa_trimstats_create(spa_t *spa)
 	ASSERT3P(spa->spa_trimstats_ks, ==, NULL);
 
 	(void) snprintf(name, KSTAT_STRLEN, "zfs/%s", spa_name(spa));
-	spa->spa_trimstats_ks = kstat_create(name, 0, "trimstats", "misc",
+	ksp = kstat_create(name, 0, "trimstats", "misc",
 	    KSTAT_TYPE_NAMED, sizeof (spa_trimstats_template) /
 	    sizeof (kstat_named_t), KSTAT_FLAG_VIRTUAL);
-	if (spa->spa_trimstats_ks) {
+	if (ksp != NULL) {
+		ksp->ks_private = spa;
+		ksp->ks_update = spa_trimstats_kstat_update;
+		spa->spa_trimstats_ks = ksp;
 		spa->spa_trimstats =
 		    kmem_alloc(sizeof (spa_trimstats_t), KM_SLEEP);
 		*spa->spa_trimstats = spa_trimstats_template;
