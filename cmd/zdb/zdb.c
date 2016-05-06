@@ -602,8 +602,14 @@ dump_zpldir(objset_t *os, uint64_t object, void *data, size_t size)
 		/* 15 */ "15 (invalid)",
 	};
 
+	if (dump_opt['z'] > 1)
+		return;
+
 	dump_zap_stats(os, object);
 	(void) printf("\n");
+
+	if (dump_opt['z'])
+		return;
 
 	for (zap_cursor_init(&zc, os, object);
 	    zap_cursor_retrieve(&zc, &attr) == 0;
@@ -3757,7 +3763,7 @@ main(int argc, char **argv)
 		spa_config_path = spa_config_path_env;
 
 	while ((c = getopt(argc, argv,
-	    "bcdhilmMI:suCDRSAFLXx:evp:t:U:PV")) != -1) {
+	    "bcdhilmMI:suCDRSAFLXx:evp:t:U:PVz")) != -1) {
 		switch (c) {
 		case 'b':
 		case 'c':
@@ -3782,6 +3788,7 @@ main(int argc, char **argv)
 		case 'X':
 		case 'e':
 		case 'P':
+		case 'z':
 			dump_opt[c]++;
 			break;
 		case 'V':
