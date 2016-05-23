@@ -2385,14 +2385,16 @@ arc_evict_hdr(arc_buf_hdr_t *hdr, kmutex_t *hash_lock)
 	ASSERT3U(hdr->b_l1hdr.b_datacnt, >, 0);
 	while (hdr->b_l1hdr.b_buf) {
 		arc_buf_t *buf = hdr->b_l1hdr.b_buf;
-		if (!mutex_tryenter(&buf->b_evict_lock)) {
-			ARCSTAT_BUMP(arcstat_mutex_miss);
-			break;
-		}
-		if (buf->b_data != NULL)
-			bytes_evicted += hdr->b_size;
+
 		if (buf->b_efunc != NULL) {
 			mutex_enter(&arc_user_evicts_lock);
+			if (!mutex_tryenter(&buf->b_evict_lock)) {
+				ARCSTAT_BUMP(arcstat_mutex_miss);
+				mutex_exit(&arc_user_evicts_lock);
+				break;
+			}
+			if (buf->b_data != NULL)
+				bytes_evicted += hdr->b_size;
 			arc_buf_destroy(buf, FALSE);
 			hdr->b_l1hdr.b_buf = buf->b_next;
 			buf->b_hdr = &arc_eviction_hdr;
@@ -2402,7 +2404,8 @@ arc_evict_hdr(arc_buf_hdr_t *hdr, kmutex_t *hash_lock)
 			mutex_exit(&arc_user_evicts_lock);
 			mutex_exit(&buf->b_evict_lock);
 		} else {
-			mutex_exit(&buf->b_evict_lock);
+			if (buf->b_data != NULL)
+				bytes_evicted += hdr->b_size;
 			arc_buf_destroy(buf, TRUE);
 		}
 	}
