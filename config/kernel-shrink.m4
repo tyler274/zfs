@@ -67,17 +67,20 @@ AC_DEFUN([ZFS_AC_KERNEL_S_INSTANCES_LIST_HEAD], [
 	])
 ])
 
+dnl #
+dnl # 3.1 API change
+dnl # The nr_cached_objects() callback was added to struct super_operations.
+dnl # In the initial implementation, the callback takes only a struct
+dnl # super_block parameter and returns int.
+dnl #
 AC_DEFUN([ZFS_AC_KERNEL_NR_CACHED_OBJECTS], [
 	AC_MSG_CHECKING([whether sops->nr_cached_objects() exists])
 	ZFS_LINUX_TRY_COMPILE([
 		#include <linux/fs.h>
 
-		int nr_cached_objects(struct super_block *sb) { return 0; }
-
-		static const struct super_operations
-		    sops __attribute__ ((unused)) = {
-			.nr_cached_objects = nr_cached_objects,
-		};
+		struct super_operations sops __attribute__ ((unused));
+		unsigned long l __attribute__ ((unused)) =
+		    sizeof(sops.nr_cached_objects);
 	],[
 	],[
 		AC_MSG_RESULT(yes)
@@ -88,23 +91,80 @@ AC_DEFUN([ZFS_AC_KERNEL_NR_CACHED_OBJECTS], [
 	])
 ])
 
-AC_DEFUN([ZFS_AC_KERNEL_FREE_CACHED_OBJECTS], [
-	AC_MSG_CHECKING([whether sops->free_cached_objects() exists])
+dnl #
+dnl # 3.11 API change
+dnl # The nr_cached_objects() callback returns long.
+dnl #
+AC_DEFUN([ZFS_AC_KERNEL_NR_CACHED_OBJECTS_RETURNS_LONG], [
+	AC_MSG_CHECKING([whether sops->nr_cached_objects() returns long])
 	ZFS_LINUX_TRY_COMPILE([
 		#include <linux/fs.h>
-
-		void free_cached_objects(struct super_block *sb, int x)
-		    { return; }
+		long nr_cached_objects(struct super_block *sb) { return 0; }
 
 		static const struct super_operations
-		    sops __attribute__ ((unused)) = {
-			.free_cached_objects = free_cached_objects,
+		sops __attribute__ ((unused)) = {
+			.nr_cached_objects = nr_cached_objects,
 		};
+
 	],[
 	],[
 		AC_MSG_RESULT(yes)
-		AC_DEFINE(HAVE_FREE_CACHED_OBJECTS, 1,
-			[sops->free_cached_objects() exists])
+		AC_DEFINE(HAVE_NR_CACHED_OBJECTS_RETURNS_LONG, 1,
+			[sops->nr_cached_objects() returns long])
+	],[
+		AC_MSG_RESULT(no)
+	])
+])
+
+dnl #
+dnl # 3.19 API change
+dnl # The nr_cached_objects() callback has a nid parameter.
+dnl #
+AC_DEFUN([ZFS_AC_KERNEL_NR_CACHED_OBJECTS_HAS_NID], [
+	AC_MSG_CHECKING([whether sops->nr_cached_objects() has nid])
+	ZFS_LINUX_TRY_COMPILE([
+		#include <linux/fs.h>
+
+		long nr_cached_objects(struct super_block *sb,
+		    int nid) { return 0; }
+
+		static const struct super_operations
+		sops __attribute__ ((unused)) = {
+			.nr_cached_objects = nr_cached_objects,
+		};
+
+	],[
+	],[
+		AC_MSG_RESULT(yes)
+		AC_DEFINE(NR_CACHED_OBJECTS_HAS_NID, 1,
+			[sops->nr_cached_objects() has nid])
+	],[
+		AC_MSG_RESULT(no)
+	])
+])
+
+dnl #
+dnl # 4.0 API change
+dnl # The nr_cached_objects() callback has a struct shrink_control parameter.
+dnl #
+AC_DEFUN([ZFS_AC_KERNEL_NR_CACHED_OBJECTS_HAS_SHRINK_CONTROL], [
+	AC_MSG_CHECKING([whether sops->nr_cached_objects() has struct shrink_control])
+	ZFS_LINUX_TRY_COMPILE([
+		#include <linux/fs.h>
+
+		long nr_cached_objects(struct super_block *sb,
+		    struct shrink_control *sc) { return 0; }
+
+		static const struct super_operations
+		sops __attribute__ ((unused)) = {
+			.nr_cached_objects = nr_cached_objects,
+		};
+
+	],[
+	],[
+		AC_MSG_RESULT(yes)
+		AC_DEFINE(NR_CACHED_OBJECTS_HAS_SHRINK_CONTROL, 1,
+			[sops->nr_cached_objects() has shrink_control])
 	],[
 		AC_MSG_RESULT(no)
 	])

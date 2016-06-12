@@ -498,20 +498,25 @@ zpl_prune_sb(int64_t nr_to_scan, void *arg)
 }
 
 #ifdef HAVE_NR_CACHED_OBJECTS
-static int
+static
+#if defined(HAVE_NR_CACHED_OBJECTS_RETURNS_LONG) || \
+	defined(NR_CACHED_OBJECTS_HAS_NID) || \
+	defined(NR_CACHED_OBJECTS_HAS_SHRINK_CONTROL)
+long
+#else
+int
+#endif
+#if defined(NR_CACHED_OBJECTS_HAS_SHRINK_CONTROL)
+zpl_nr_cached_objects(struct super_block *sb, struct shrink_control *sc)
+#elif defined(NR_CACHED_OBJECTS_HAS_NID)
+zpl_nr_cached_objects(struct super_block *sb, int nid)
+#else
 zpl_nr_cached_objects(struct super_block *sb)
+#endif
 {
 	return (0);
 }
 #endif /* HAVE_NR_CACHED_OBJECTS */
-
-#ifdef HAVE_FREE_CACHED_OBJECTS
-static void
-zpl_free_cached_objects(struct super_block *sb, int nr_to_scan)
-{
-	/* noop */
-}
-#endif /* HAVE_FREE_CACHED_OBJECTS */
 
 const struct super_operations zpl_super_operations = {
 	.alloc_inode		= zpl_inode_alloc,
@@ -534,9 +539,6 @@ const struct super_operations zpl_super_operations = {
 #ifdef HAVE_NR_CACHED_OBJECTS
 	.nr_cached_objects	= zpl_nr_cached_objects,
 #endif /* HAVE_NR_CACHED_OBJECTS */
-#ifdef HAVE_FREE_CACHED_OBJECTS
-	.free_cached_objects	= zpl_free_cached_objects,
-#endif /* HAVE_FREE_CACHED_OBJECTS */
 };
 
 struct file_system_type zpl_fs_type = {
