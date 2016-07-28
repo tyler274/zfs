@@ -485,28 +485,27 @@ bio_map(struct bio *bio, void *bio_ptr, unsigned int bio_size)
 }
 
 static inline void
-vdev_submit_bio_impl(int rw, struct bio *bio)
+vdev_submit_bio_impl(struct bio *bio)
 {
 #ifdef HAVE_1ARG_SUBMIT_BIO
-	bio->bi_rw |= rw;
 	submit_bio(bio);
 #else
-	submit_bio(rw, bio);
+	submit_bio(0, bio);
 #endif
 }
 
 static inline void
-vdev_submit_bio(int rw, struct bio *bio)
+vdev_submit_bio(struct bio *bio)
 {
 #ifdef HAVE_CURRENT_BIO_TAIL
 	struct bio **bio_tail = current->bio_tail;
 	current->bio_tail = NULL;
-	vdev_submit_bio_impl(rw, bio);
+	vdev_submit_bio_impl(bio);
 	current->bio_tail = bio_tail;
 #else
 	struct bio_list *bio_list = current->bio_list;
 	current->bio_list = NULL;
-	vdev_submit_bio_impl(rw, bio);
+	vdev_submit_bio_impl(bio);
 	current->bio_list = bio_list;
 #endif
 }
@@ -574,7 +573,7 @@ retry:
 
 		dr->dr_bio[i]->bi_bdev = bdev;
 		BIO_BI_SECTOR(dr->dr_bio[i]) = bio_offset >> 9;
-		dr->dr_bio[i]->bi_rw = rw;
+		dr->dr_bio[i]->bi_rw |= rw;
 		dr->dr_bio[i]->bi_end_io = vdev_disk_physio_completion;
 		dr->dr_bio[i]->bi_private = dr;
 
@@ -592,7 +591,7 @@ retry:
 	/* Submit all bio's associated with this dio */
 	for (i = 0; i < dr->dr_bio_count; i++)
 		if (dr->dr_bio[i])
-			vdev_submit_bio(rw, dr->dr_bio[i]);
+			vdev_submit_bio(dr->dr_bio[i]);
 
 	(void) vdev_disk_dio_put(dr);
 
@@ -645,7 +644,8 @@ vdev_disk_io_flush(struct block_device *bdev, zio_t *zio)
 	bio->bi_end_io = vdev_disk_io_flush_completion;
 	bio->bi_private = zio;
 	bio->bi_bdev = bdev;
-	vdev_submit_bio(VDEV_WRITE_FLUSH_FUA, bio);
+	bio->bi_rw |= VDEV_WRITE_FLUSH_FUA;
+	vdev_submit_bio(bio);
 	invalidate_bdev(bdev);
 
 	return (0);
