@@ -473,9 +473,9 @@ vdev_raidz_math_init(void)
 	for (fn = 0; fn < RAIDZ_GEN_NUM; fn++) {
 		bench_parity = fn + 1;
 		/* New raidz_map is needed for each generate_p/q/r */
-		bench_rm = vdev_raidz_map_alloc(bench_zio->io_data, BENCH_ZIO_SIZE,
-		    0, SPA_MINBLOCKSHIFT, BENCH_D_COLS + bench_parity,
-		    bench_parity, B_TRUE);
+		bench_rm = vdev_raidz_map_alloc(bench_zio->io_data,
+		    BENCH_ZIO_SIZE, 0, SPA_MINBLOCKSHIFT,
+		    BENCH_D_COLS + bench_parity, bench_parity, B_TRUE);
 
 		benchmark_raidz_impl(bench_rm, fn, benchmark_gen_impl);
 

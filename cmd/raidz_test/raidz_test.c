@@ -331,8 +331,8 @@ init_raidz_map(raidz_test_opts_t *opts, zio_t **zio, const int parity)
 	(*zio)->io_data = raidz_alloc(alloc_dsize);
 	init_zio_data(*zio);
 
-	rm = vdev_raidz_map_alloc((*zio)->io_data, alloc_dsize, 0, opts->rto_ashift,
-	    total_ncols, parity, B_TRUE);
+	rm = vdev_raidz_map_alloc((*zio)->io_data, alloc_dsize, 0,
+	    opts->rto_ashift, total_ncols, parity, B_TRUE);
 
 	/* Make sure code columns are destroyed */
 	corrupt_colums(rm, ccols, parity);

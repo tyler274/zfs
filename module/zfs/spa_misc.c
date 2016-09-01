@@ -2067,7 +2067,7 @@ spa_trimstats_kstat_update(kstat_t *ksp, int rw)
 		    sizeof (kstat_named_t); ++i)
 			((kstat_named_t *)trimstats)[i].value.ui64 = 0;
 	}
-	return 0;
+	return (0);
 }
 
 /*
