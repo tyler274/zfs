@@ -2747,12 +2747,14 @@ metaslab_check_free(spa_t *spa, const blkptr_t *bp)
 		if (msp->ms_loaded) {
 			range_tree_verify(msp->ms_tree, offset, size);
 #ifdef	DEBUG
+			mutex_enter(&msp->ms_lock);
 			range_tree_verify(msp->ms_cur_ts->ts_tree,
 			    offset, size);
 			if (msp->ms_prev_ts != NULL) {
 				range_tree_verify(msp->ms_prev_ts->ts_tree,
 				    offset, size);
 			}
+			mutex_exit(&msp->ms_lock);
 #endif
 		}
 
