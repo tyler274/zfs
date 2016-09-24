@@ -156,6 +156,7 @@ boolean_t	zio_taskq_sysdc = B_TRUE;	/* use SDC scheduling class */
 uint_t		zio_taskq_basedc = 80;		/* base duty cycle */
 
 boolean_t	spa_create_process = B_TRUE;	/* no process ==> no sysdc */
+uint_t		zfs_leave_hole = 0;		/* leave hole when removing vdev */
 
 /*
  * This (illegal) pool name is used when temporarily importing a spa_t in order
@@ -5375,7 +5376,7 @@ spa_vdev_remove_from_namespace(spa_t *spa, vdev_t *vd)
 
 	vdev_free(vd);
 
-	if (last_vdev) {
+	if (last_vdev && !zfs_leave_hole) {
 		vdev_compact_children(rvd);
 	} else {
 		vd = vdev_alloc_common(spa, id, 0, &vdev_hole_ops);
@@ -6910,5 +6911,9 @@ MODULE_PARM_DESC(spa_load_verify_data,
 module_param(zio_taskq_batch_pct, uint, 0444);
 MODULE_PARM_DESC(zio_taskq_batch_pct,
 	"Percentage of CPUs to run an IO worker thread");
+
+module_param(zfs_leave_hole, uint, 0644);
+MODULE_PARM_DESC(zfs_leave_hole,
+	"Leave holes when removing vdevs");
 
 #endif

@@ -346,6 +346,10 @@ vdev_alloc_common(spa_t *spa, uint_t id, uint64_t guid, vdev_ops_t *ops)
 	vd->vdev_state = VDEV_STATE_CLOSED;
 	vd->vdev_ishole = (ops == &vdev_hole_ops);
 
+	if (ops == &vdev_hole_ops) {
+		vd->vdev_path = spa_strdup("/dev/vhole");
+	}
+
 	list_link_init(&vd->vdev_config_dirty_node);
 	list_link_init(&vd->vdev_state_dirty_node);
 	mutex_init(&vd->vdev_dtl_lock, NULL, MUTEX_NOLOCKDEP, NULL);
@@ -379,6 +383,7 @@ vdev_alloc(spa_t *spa, vdev_t **vdp, nvlist_t *nv, vdev_t *parent, uint_t id,
 	char *type;
 	uint64_t guid = 0, islog, nparity;
 	vdev_t *vd;
+	char *path;
 
 	ASSERT(spa_config_held(spa, SCL_ALL, RW_WRITER) == SCL_ALL);
 
@@ -387,6 +392,17 @@ vdev_alloc(spa_t *spa, vdev_t **vdp, nvlist_t *nv, vdev_t *parent, uint_t id,
 
 	if ((ops = vdev_getops(type)) == NULL)
 		return (SET_ERROR(EINVAL));
+
+	/*
+	 * Allow access to hole vdevs with a "path"
+	 */
+	if (strcmp(type, VDEV_TYPE_HOLE) == 0 &&
+	    nvlist_lookup_string(nv, ZPOOL_CONFIG_PATH, &path) == 0) {
+		if (strncmp(path, "/dev", 3) == 0)
+			ops = vdev_getops(VDEV_TYPE_DISK);
+		else
+			ops = vdev_getops(VDEV_TYPE_FILE);
+	}
 
 	/*
 	 * If this is a load, get the vdev guid from the nvlist.
