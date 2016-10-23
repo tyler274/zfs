@@ -47,7 +47,7 @@
  */
 unsigned long metaslab_aliquot = 512 << 10;
 
-uint64_t metaslab_gang_bang = SPA_MAXBLOCKSIZE + 1;	/* force gang blocks */
+uint64_t metaslab_gang_bang = 513; /* SPA_MAXBLOCKSIZE + 1; */	/* force gang blocks */
 
 /*
  * The in-core space map representation is more compact than its on-disk form.

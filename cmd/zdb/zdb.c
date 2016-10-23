@@ -93,6 +93,8 @@ uint64_t zfs_arc_max, zfs_arc_meta_limit;
 int zfs_vdev_async_read_max_active;
 #endif
 
+extern int gang_max_depth;
+
 const char cmdname[] = "zdb";
 uint8_t dump_opt[256];
 
@@ -2662,9 +2664,10 @@ zdb_blkptr_cb(spa_t *spa, zilog_t *zilog, const blkptr_t *bp,
 
 		zfs_nicenum(bytes, buf, sizeof (buf));
 		(void) fprintf(stderr,
-		    "\rganged=%llu %5s completed (%4dMB/s) "
+		    "\rgang=%llu[%d] %5s completed (%4dMB/s) "
 		    "estimated time remaining: %uhr %02umin %02usec        ",
 		    (unsigned long long)zcb->zcb_type[ZB_TOTAL][ZDB_OT_TOTAL].zb_gangs,
+		    gang_max_depth,
 		    buf, kb_per_sec / 1024,
 		    sec_remaining / 60 / 60,
 		    sec_remaining / 60 % 60,
@@ -2962,6 +2965,7 @@ dump_block_stats(spa_t *spa)
 	    (u_longlong_t)tzb->zb_count);
 	(void) printf("\tganged count:  %10llu\n",
 	    (longlong_t)tzb->zb_gangs);
+	(void) printf("\tmax gang depth:  %10d\n", gang_max_depth);
 	(void) printf("\tbp logical:    %10llu      avg: %6llu\n",
 	    (u_longlong_t)tzb->zb_lsize,
 	    (u_longlong_t)(tzb->zb_lsize / tzb->zb_count));
