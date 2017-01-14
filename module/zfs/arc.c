@@ -275,10 +275,6 @@
 #include <sys/multilist.h>
 #include <sys/abd.h>
 #ifdef _KERNEL
-#include <sys/vmsystm.h>
-#include <vm/anon.h>
-#include <sys/fs/swapnode.h>
-#include <sys/zpl.h>
 #include <linux/mm_compat.h>
 #endif
 #include <sys/callb.h>

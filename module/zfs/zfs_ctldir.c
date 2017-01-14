@@ -86,7 +86,6 @@
 #include <sys/dsl_destroy.h>
 #include <sys/dsl_deleg.h>
 #include <sys/mount.h>
-#include <sys/zpl.h>
 #include "zfs_namecheck.h"
 
 /*

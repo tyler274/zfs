@@ -48,7 +48,6 @@
 #include <sys/acl.h>
 #include <sys/atomic.h>
 #include <sys/cred.h>
-#include <sys/zpl.h>
 
 /*
  * Functions to replay ZFS intent log (ZIL) records

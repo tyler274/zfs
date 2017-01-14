@@ -76,7 +76,6 @@
 #include <sys/kidmap.h>
 #include <sys/cred.h>
 #include <sys/attr.h>
-#include <sys/zpl.h>
 
 /*
  * Programming rules.

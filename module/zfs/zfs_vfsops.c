@@ -65,7 +65,6 @@
 #include <sys/dnlc.h>
 #include <sys/dmu_objset.h>
 #include <sys/spa_boot.h>
-#include <sys/zpl.h>
 #include "zfs_comutil.h"
 
 /*ARGSUSED*/

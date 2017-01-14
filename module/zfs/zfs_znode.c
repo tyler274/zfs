@@ -57,7 +57,6 @@
 #include <sys/dnode.h>
 #include <sys/fs/zfs.h>
 #include <sys/kidmap.h>
-#include <sys/zpl.h>
 #endif /* _KERNEL */
 
 #include <sys/dmu.h>
