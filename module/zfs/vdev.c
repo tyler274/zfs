@@ -54,6 +54,12 @@
 int metaslabs_per_vdev = 200;
 
 /*
+ * Ignore errors during scrub/resilver.  Allows to work around resilver
+ * upon import when there are pool errors.
+ */
+int zfs_scan_ignore_errors = 0;
+
+/*
  * Virtual device management.
  */
 
@@ -1889,6 +1895,8 @@ vdev_dtl_reassess(vdev_t *vd, uint64_t txg, uint64_t scrub_txg, int scrub_done)
 		 * excise regions on vdevs that were available during
 		 * the entire duration of this scan.
 		 */
+		if (zfs_scan_ignore_errors && scn)
+			scn->scn_phys.scn_errors = 0;
 		if (scrub_txg != 0 &&
 		    (spa->spa_scrub_started ||
 		    (scn != NULL && scn->scn_phys.scn_errors == 0)) &&
@@ -3691,5 +3699,9 @@ module_param(metaslabs_per_vdev, int, 0644);
 MODULE_PARM_DESC(metaslabs_per_vdev,
 	"Divide added vdev into approximately (but no more than) this number "
 	"of metaslabs");
+
+module_param(zfs_scan_ignore_errors, int, 0644);
+MODULE_PARM_DESC(zfs_scan_ignore_errors,
+	"Ignore errors during resilver/scrub");
 /* END CSTYLED */
 #endif
