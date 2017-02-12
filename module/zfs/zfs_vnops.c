@@ -722,13 +722,11 @@ zfs_write(struct inode *ip, uio_t *uio, int ioflag, cred_t *cr)
 		woff = uio->uio_loffset;
 		if (zfs_owner_overquota(zsb, zp, B_FALSE) ||
 		    zfs_owner_overquota(zsb, zp, B_TRUE)) {
-			if (abuf != NULL)
-				dmu_return_arcbuf(abuf);
 			error = SET_ERROR(EDQUOT);
 			break;
 		}
 
-		if (xuio && abuf == NULL) {
+		if (xuio) {
 #ifdef HAVE_UIO_ZEROCOPY
 			ASSERT(i_iov < iovcnt);
 			ASSERT3U(uio->uio_segflg, !=, UIO_BVEC);
@@ -740,7 +738,7 @@ zfs_write(struct inode *ip, uio_t *uio, int ioflag, cred_t *cr)
 			    aiov->iov_len == arc_buf_size(abuf)));
 			i_iov++;
 #endif
-		} else if (abuf == NULL && n >= max_blksz &&
+		} else if (n >= max_blksz &&
 		    woff >= zp->z_size &&
 		    P2PHASE(woff, max_blksz) == 0 &&
 		    zp->z_blksz == max_blksz) {
