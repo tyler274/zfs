@@ -2374,7 +2374,8 @@ vdev_raidz_trim_append_rc(dkioc_free_list_t *dfl, uint64_t *num_extsp,
  * lists that then go to each component vdev.
  */
 static void
-vdev_raidz_trim(vdev_t *vd, zio_t *pio, dkioc_free_list_t *dfl)
+vdev_raidz_trim(vdev_t *vd, zio_t *pio, dkioc_free_list_t *dfl,
+    boolean_t auto_trim)
 {
 	dkioc_free_list_t **sub_dfls;
 	uint64_t *sub_dfls_num_exts;
@@ -2430,7 +2431,7 @@ vdev_raidz_trim(vdev_t *vd, zio_t *pio, dkioc_free_list_t *dfl)
 		if (sub_dfls_num_exts[i] != 0) {
 			vdev_t *child = vd->vdev_child[i];
 			zio_nowait(zio_trim_dfl(pio, child->vdev_spa, child,
-			    sub_dfls[i], B_TRUE, NULL, NULL));
+			    sub_dfls[i], B_TRUE, auto_trim, NULL, NULL));
 		} else {
 			dfl_free(sub_dfls[i]);
 		}
