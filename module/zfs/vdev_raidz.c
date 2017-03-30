@@ -2405,6 +2405,9 @@ vdev_raidz_trim(vdev_t *vd, zio_t *pio, dkioc_free_list_t *dfl,
 		uint64_t j;
 		raidz_map_t *rm;
 
+		if (length <= vd->vdev_nparity << vd->vdev_top->vdev_ashift)
+			continue;
+
 		zio->io_offset = start;
 		zio->io_size = vdev_raidz_psize_floor(vd, length);
 		zio->io_abd = NULL;
