@@ -1061,8 +1061,9 @@ zio_trim_dfl(zio_t *pio, spa_t *spa, vdev_t *vd, dkioc_free_list_t *dfl,
 		    1 << vd->vdev_ashift, done, private, ZIO_TYPE_IOCTL,
 		    auto_trim ? ZIO_PRIORITY_AUTO_TRIM : ZIO_PRIORITY_MAN_TRIM,
 		    ZIO_FLAG_CANFAIL | ZIO_FLAG_DONT_RETRY |
-		    ZIO_FLAG_DONT_PROPAGATE | ZIO_FLAG_DONT_AGGREGATE, vd, off,
-		    NULL, ZIO_STAGE_OPEN, ZIO_TRIM_PIPELINE);
+		    ZIO_FLAG_DONT_PROPAGATE | ZIO_FLAG_DONT_AGGREGATE |
+		    ZIO_FLAG_PHYSICAL, vd, off, NULL, ZIO_STAGE_OPEN,
+		    ZIO_TRIM_PIPELINE);
 		zio->io_cmd = DKIOCFREE;
 		zio->io_dfl = dfl;
 		zio->io_dfl_free_on_destroy = dfl_free_on_destroy;
