@@ -34,6 +34,7 @@
 #include <sys/zio.h>
 #include <sys/spa_impl.h>
 #include <sys/zfeature.h>
+#include <sys/trace_vdev.h>
 
 #define	WITH_DF_BLOCK_ALLOCATOR
 
