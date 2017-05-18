@@ -50,6 +50,7 @@
 #include <zfs_prop.h>
 #include <sys/fs/zfs.h>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <sys/fm/fs/zfs.h>
 #include <sys/fm/util.h>
 #include <sys/fm/protocol.h>
@@ -6013,7 +6014,6 @@ print_trim_status(uint64_t trim_prog, uint64_t total_size, uint64_t rate,
 	time_t start_time = start_time_u64, end_time = end_time_u64;
 	char *buf;
 
-	assert(trim_prog <= total_size);
 	if (trim_prog != 0 && trim_prog != total_size) {
 		buf = ctime(&start_time);
 		buf[strlen(buf) - 1] = '\0';	/* strip trailing newline */
@@ -6021,12 +6021,12 @@ print_trim_status(uint64_t trim_prog, uint64_t total_size, uint64_t rate,
 			char rate_str[32];
 			zfs_nicenum(rate, rate_str, sizeof (rate_str));
 			(void) printf("  trim: %.02f%%\tstarted: %s\t"
-			    "(rate: %s/s)\n", (((double)trim_prog) /
-			    total_size) * 100, buf, rate_str);
+			    "(rate: %s/s)\n", MIN((((double)trim_prog) /
+			    total_size) * 100, 100), buf, rate_str);
 		} else {
 			(void) printf("  trim: %.02f%%\tstarted: %s\t"
-			    "(rate: max)\n", (((double)trim_prog) /
-			    total_size) * 100, buf);
+			    "(rate: max)\n", MIN((((double)trim_prog) /
+			    total_size) * 100, 100), buf);
 		}
 	} else {
 		if (start_time != 0) {
@@ -6526,9 +6526,9 @@ status_callback(zpool_handle_t *zhp, void *data)
 			 * For whatever reason, root vdev_stats_t don't
 			 * include log devices.
 			 */
-			print_trim_status(trim_prog, vs->vs_space +
-			    zpool_slog_space(nvroot), trim_rate,
-			    trim_start_time, trim_stop_time);
+			print_trim_status(trim_prog, (vs->vs_space -
+			    vs->vs_alloc) + zpool_slog_space(nvroot),
+			    trim_rate, trim_start_time, trim_stop_time);
 		}
 
 		(void) printf(gettext("config:\n\n"));
