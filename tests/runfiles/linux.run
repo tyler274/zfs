@@ -289,6 +289,10 @@ user =
 [tests/functional/cli_root/zpool_sync]
 tests = ['zpool_sync_001_pos', 'zpool_sync_002_neg']
 
+[tests/functional/cli_root/zpool_trim]
+tests = ['zpool_trim_001_pos', 'zpool_trim_002_pos', 'zpool_trim_003_pos',
+    'zpool_trim_004_pos', 'zpool_trim_005_neg', 'zpool_trim_006_neg']
+
 [tests/functional/cli_root/zpool_upgrade]
 tests = ['zpool_upgrade_001_pos', 'zpool_upgrade_002_pos',
     'zpool_upgrade_003_pos', 'zpool_upgrade_004_pos',
@@ -535,7 +539,9 @@ tests = ['threadsappend_001_pos']
 tests = ['tmpfile_001_pos', 'tmpfile_002_pos', 'tmpfile_003_pos']
 
 [tests/functional/trim]
-tests = ['autotrim_001_pos', 'manualtrim_001_pos']
+tests = ['autotrim_001_pos', 'autotrim_002_pos', 'manualtrim_001_pos',
+    'manualtrim_002_pos', 'manualtrim_003_pos', 'manualtrim_004_pos',
+    'manualtrim_005_pos']
 
 [tests/functional/truncate]
 tests = ['truncate_001_pos', 'truncate_002_pos']
