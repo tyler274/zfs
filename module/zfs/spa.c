@@ -7421,7 +7421,7 @@ spa_man_trim(spa_t *spa, uint64_t rate, boolean_t fulltrim)
 	spa_man_trim_taskq_create(spa);
 	spa->spa_man_trim_stop = B_FALSE;
 
-	spa_event_notify(spa, NULL, ESC_ZFS_TRIM_START);
+	spa_event_notify(spa, NULL, NULL, ESC_ZFS_TRIM_START);
 	spa_config_enter(spa, SCL_CONFIG, FTAG, RW_READER);
 	for (uint64_t i = 0; i < spa->spa_root_vdev->vdev_children; i++) {
 		vdev_t *vd = spa->spa_root_vdev->vdev_child[i];
@@ -7528,7 +7528,7 @@ spa_vdev_man_trim_done(spa_t *spa)
 			spa_trim_update_time(spa, UINT64_MAX,
 			    gethrestime_sec());
 		}
-		spa_event_notify(spa, NULL, ESC_ZFS_TRIM_FINISH);
+		spa_event_notify(spa, NULL, NULL, ESC_ZFS_TRIM_FINISH);
 		spa_async_request(spa, SPA_ASYNC_MAN_TRIM_TASKQ_DESTROY);
 		cv_broadcast(&spa->spa_man_trim_done_cv);
 	}
