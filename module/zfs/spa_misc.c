@@ -2157,6 +2157,7 @@ spa_get_hostid(void)
 #endif	/* _KERNEL */
 
 	return (myhostid);
+}
 
 int
 spa_trimstats_kstat_update(kstat_t *ksp, int rw)
