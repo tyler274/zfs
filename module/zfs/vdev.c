@@ -3759,6 +3759,8 @@ vdev_deadman(vdev_t *vd)
 				    vq->vq_io_complete_ts);
 				zfs_ereport_post(FM_EREPORT_ZFS_DELAY,
 				    spa, vd, fio, 0, 0);
+
+				zio_interrupt(fio);
 			}
 		}
 		mutex_exit(&vq->vq_lock);
